@@ -1,0 +1,88 @@
+"""LLM 客户端：默认 Stub（离线可跑、结果可复现），配了 key 才走真实接口。
+
+契约 10.3：LLM 只能调用只读与计算类工具，输出必须是受限 schema。
+"""
+import json
+import urllib.error
+import urllib.request
+
+from inv_agent import config
+
+class LLMError(RuntimeError):
+    pass
+
+class LLMClient:
+    def complete_json(self,system,user):
+        raise NotImplementedError
+
+class StubLLM(LLMClient):
+    """确定性桩：把量化信号映射成假设类型，用于测试与无 key 环境。
+
+    它不做"自由发挥"，只按固定优先级选一个假设并给出证据引用，
+    目的是让整条链路在没有外部依赖时也能端到端跑通与评估。
+    """
+    name="stub"
+
+    def complete_json(self,system,user):
+        signal=json.loads(user)
+        factors=signal.get("factors",{})
+        evidence=signal.get("evidence",[])
+        #优先级：历史不足 → 需求类信号（突增/上移）→ 供应类信号（延迟/缺货）→ 数据断点兜底
+        if signal.get("days_with_sales",0)<7:
+            hypothesis="NEW_PRODUCT_NO_HISTORY"
+        elif factors.get("surge",0)>0:
+            hypothesis="PROMOTION_SURGE"
+        elif factors.get("shift",0)>0:
+            hypothesis="DEMAND_SHIFT"
+        elif factors.get("leadtime",0)>=1.0:
+            hypothesis="SUPPLIER_DELAY"
+        elif factors.get("stockout",0)>=1.0 or factors.get("coverage",0)>0:
+            hypothesis="STOCKOUT_CASCADE"
+        elif factors.get("zeros",0)>0:
+            hypothesis="DATA_ANOMALY"
+        else:
+            hypothesis="DATA_ANOMALY"
+        severity=min(1.0,max(0.2,signal.get("score",0)/6.0))
+        return {
+            "hypothesis_type":hypothesis,
+            "evidence_refs":evidence,
+            "conflicting_evidence":bool(signal.get("missing_days",0)),
+            "proposed_actions":[{"action":"ADVANCE","rationale":"证据指向单一主因，按规则路径补货"},
+                                {"action":"HUMAN","rationale":"金额或覆盖天数触及阈值时转人工"}],
+            "needs_human":signal.get("score",0)>=config.ANOMALY_ENTER_SCORE*1.5,
+            "confidence":round(0.55+0.4*severity,3),
+            "engine":self.name,
+        }
+
+class OpenAICompatLLM(LLMClient):
+    """OpenAI 兼容的 /chat/completions，用标准库实现，少一个依赖。"""
+    name="openai-compat"
+
+    def __init__(self,base_url,api_key,model,timeout=60):
+        self.base_url=base_url.rstrip("/")
+        self.api_key=api_key
+        self.model=model
+        self.timeout=timeout
+
+    def complete_json(self,system,user):
+        body={"model":self.model,"temperature":0,
+              "response_format":{"type":"json_object"},
+              "messages":[{"role":"system","content":system},{"role":"user","content":user}]}
+        req=urllib.request.Request(self.base_url+"/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type":"application/json","Authorization":"Bearer "+self.api_key})
+        try:
+            with urllib.request.urlopen(req,timeout=self.timeout) as resp:
+                payload=json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            raise LLMError("LLM HTTP "+str(e.code)) from e
+        except Exception as e:
+            raise LLMError("LLM 调用失败: "+type(e).__name__) from e
+        text=payload["choices"][0]["message"]["content"]
+        return json.loads(text)
+
+def get_client():
+    """有 key 走真实接口，否则用桩；两种实现返回同一 schema。"""
+    if config.LLM_API_KEY and config.LLM_BASE_URL and config.LLM_MODEL:
+        return OpenAICompatLLM(config.LLM_BASE_URL,config.LLM_API_KEY,config.LLM_MODEL)
+    return StubLLM()

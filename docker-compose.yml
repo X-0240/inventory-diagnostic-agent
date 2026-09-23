@@ -1,0 +1,35 @@
+# 本地开发用 MySQL 8（契约要求：数据库必须 MySQL，且要能看到慢查询）
+# 时区固定 UTC，与契约「库内 UTC、展示按 Asia/Shanghai」一致
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: inv-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_APP_USER}
+      MYSQL_PASSWORD: ${MYSQL_APP_PASSWORD}
+      TZ: UTC
+    ports:
+      - "${MYSQL_PORT}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+      - --slow-query-log=1
+      - --long-query-time=0.5
+      - --log-output=TABLE
+      - --log-queries-not-using-indexes=0
+      - --max-connections=200
+    healthcheck:
+      test: ["CMD","mysqladmin","ping","-h","127.0.0.1","-u","root","-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+volumes:
+  mysql_data:
