@@ -128,6 +128,12 @@ def seed_reference(grouped,top,price):
                         "lead_time_days,moq,pack_size,service_level) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                         tuple(row[k] for k in ("sku_code","name","category","supplier_id","unit_cost",
                                                "price","lead_time_days","moq","pack_size","service_level")))
+    #重灌同时清掉图检查点：否则历史 checkpoint 会带着已删除的 case_id 恢复，触发外键错误
+    checkpoint=config.DATA_DIR/"checkpoints.sqlite"
+    for suffix in ("","-wal","-shm"):
+        p=Path(str(checkpoint)+suffix)
+        if p.exists():
+            p.unlink()
     return suppliers
 
 def transform_qty(scenario,day_index,qty):

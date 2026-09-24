@@ -18,13 +18,14 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 CONTAINER="inv-mysql"
 ROOT_PW="inv_local_root"
-DB="inventory"
+DB="perf_lab"          #性能对照表放独立库，业务库保持只有 13 张业务表
+BUSINESS_DB="inventory"
 OUT=ROOT/"docs"/("慢查询对照_"+date.today().strftime("%Y%m%d")+".md")
 
-def sql(statement):
+def sql(statement,db=None):
     args=["docker","exec",CONTAINER,"mysql","-uroot","-p"+ROOT_PW,
           "--default-character-set=utf8mb4","--batch","--raw","--skip-column-names",
-          DB,"-e",statement]
+          db or DB,"-e",statement]
     r=subprocess.run(args,capture_output=True,text=True,encoding="utf-8",errors="replace")
     if r.returncode!=0:
         raise RuntimeError("SQL 失败: "+statement[:70]+" :: "+r.stderr.strip()[:200])
@@ -36,6 +37,7 @@ def scalar(statement):
 
 def build_perf_tables(sales_rows=1500000,suggestion_rows=200000):
     print("构建放大表（首次约 1-2 分钟）...")
+    sql("CREATE DATABASE IF NOT EXISTS "+DB+" DEFAULT CHARSET utf8mb4",db=BUSINESS_DB)
     sql("SET GLOBAL cte_max_recursion_depth=1000000")
     sql("DROP TABLE IF EXISTS perf_sales")
     sql("""CREATE TABLE perf_sales (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

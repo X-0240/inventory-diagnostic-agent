@@ -6,6 +6,7 @@
 """
 import json
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Any, Optional, TypedDict
 
@@ -280,7 +281,12 @@ def run(sku_code,period,mode="plan",diagnose=True,actor="unknown",role="APPROVER
     global GRAPH
     if GRAPH is None:
         GRAPH=build()
-    thread_id=sku_code+":"+period+":"+mode
+    #批量模式每次用新 thread：旧 checkpoint 可能带着被重灌删掉的 case_id，
+    #业务状态才是权威源，批量路径不该从历史 checkpoint 恢复
+    if mode=="plan":
+        thread_id=sku_code+":"+period+":plan:"+uuid.uuid4().hex[:8]
+    else:
+        thread_id=sku_code+":"+period+":"+mode
     cfg={"configurable":{"thread_id":thread_id}}
     state={"sku_code":sku_code,"period":period,"mode":mode,"diagnose":diagnose,
            "actor":actor,"role":role,"errors":[]}

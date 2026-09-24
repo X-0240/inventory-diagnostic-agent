@@ -132,7 +132,15 @@ def suggest_qty(inventory_position,reorder_point_qty,target_qty_value,moq,pack_s
         raw=min(raw,allowed)
     if raw<=0:
         return 0
-    return round_up_to_pack(raw,pack_size,moq)
+    qty=round_up_to_pack(raw,pack_size,moq)
+    #受上限约束时，包装倍数必须向下取整，否则向上取整会把库存顶过上限（差几个单位的假违规）
+    if cap_level is not None and inventory_position+qty>cap_level:
+        room=int(cap_level-inventory_position)
+        step=pack_size if pack_size and pack_size>1 else 1
+        qty=(room//step)*step if room>0 else 0
+        if qty<moq:
+            return 0
+    return qty
 
 def impact_amount(qty,unit_cost):
     """影响金额：用于异常排序与审批分级。"""

@@ -3,6 +3,7 @@
 契约 10.3：LLM 只能调用只读与计算类工具，输出必须是受限 schema。
 """
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -128,7 +129,12 @@ class OpenAICompatLLM(LLMClient):
         return json.loads(text)
 
 def get_client():
-    """有 key 走真实接口，否则用桩；两种实现返回同一 schema。"""
+    """有 key 走真实接口，否则用桩；两种实现返回同一 schema。
+
+    LLM_FORCE_STUB=1 时即使配了 key 也走桩：跑演示数据或回归测试不该烧钱、也不该等十几秒。
+    """
+    if os.getenv("LLM_FORCE_STUB")=="1":
+        return StubLLM()
     if config.LLM_API_KEY and config.LLM_BASE_URL and config.LLM_MODEL:
         return OpenAICompatLLM(config.LLM_BASE_URL,config.LLM_API_KEY,config.LLM_MODEL)
     return StubLLM()

@@ -93,3 +93,16 @@ def test_winsorize_trims_tails():
     out=compute.winsorize(series)
     assert max(out)<1000
     assert len(out)==len(series)
+
+def test_pack_rounding_never_exceeds_cap():
+    #上限只剩 182 的余量、包装倍数 5：应向下取整到 180，而不是向上到 185
+    qty=compute.suggest_qty(inventory_position=10,reorder_point_qty=20,target_qty_value=500,
+                            moq=1,pack_size=5,cap_level=192)
+    assert qty==180
+    assert 10+qty<=192
+
+def test_cap_room_smaller_than_moq_returns_zero():
+    #余量只有 30，低于最小起订量 50：不应当为了凑 MOQ 把库存顶过上限，返回 0
+    qty=compute.suggest_qty(inventory_position=10,reorder_point_qty=20,target_qty_value=500,
+                            moq=50,pack_size=10,cap_level=40)
+    assert qty==0

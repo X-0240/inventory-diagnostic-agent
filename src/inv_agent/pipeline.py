@@ -189,6 +189,11 @@ def persist_plan(plan,diagnosis=None,case_id=None,status="PENDING_APPROVAL",viol
         confidence=float(diagnosis["confidence"])
         proposed=diagnosis["proposed_actions"]
         conflicting=bool(diagnosis["conflicting_evidence"])
+    #防御：case_id 指向的案件可能已被重灌删掉，这时按"没有案件"落库，避免外键失败
+    if case_id is not None:
+        exists=db.query_one("SELECT id FROM exception_case WHERE id=%s",(case_id,))
+        if not exists:
+            case_id=None
     suggestion_id=repository.insert_suggestion(
         sku_id=sku["id"],period=plan["period"],qty=plan["qty"],amount=plan["amount"],
         basis=plan["basis"],rule_trace=plan["rule_trace"],content_hash=plan["content_hash"],
