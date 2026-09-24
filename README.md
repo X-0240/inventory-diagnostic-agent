@@ -92,7 +92,7 @@ PYTHONPATH=src .venv/Scripts/python scripts/llm_smoke.py
 ## 已实测的证据（2026-09-24）
 
 - `pytest tests -q` → **48 passed**（含数据库约束与执行器用例）。
-- v1.1 后：`pytest tests -q` → **66 passed**（新增接口层、稳健离散度、held-out 纪律用例）。
+- v1.1 后：`pytest tests -q` → **64 passed**（新增接口层、稳健离散度、held-out 纪律用例）。
 - 慢查询对照（放大到 150 万行、同一批数据只改索引）：
   Q1 聚合 489.7 ms → 80.4 ms（扫描 150 万 → 4.5 万行，优化前 3 条进慢日志、优化后 0 条）；
   Q2 单 SKU 明细 281.5 ms → 1.1 ms（扫描 150 万 → 50 行，filesort 消失）；
