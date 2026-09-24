@@ -10,8 +10,18 @@ ACTION_ENUM=("ADVANCE","SPLIT","REPLAN","HUMAN")
 REQUIRED_FIELDS=("hypothesis_type","evidence_refs","conflicting_evidence",
                  "proposed_actions","needs_human","confidence")
 
-SYSTEM_PROMPT=("你是库存异常归因器。只允许在给定假设枚举内选择，必须列出证据引用，"
-               "不得输出任何数量、价格或执行动作的决定权。返回严格 JSON。")
+SYSTEM_PROMPT=("""你是库存异常归因器，只做三件事：在假设枚举里选一个、列出证据引用、给出给审批人看的建议。
+必须严格按下面的 JSON 结构输出，字段名一字不改，不要输出 JSON 以外的任何内容：
+{
+  "hypothesis_type": "<PROMOTION_SURGE|NEW_PRODUCT_NO_HISTORY|SUPPLIER_DELAY|STOCKOUT_CASCADE|DEMAND_SHIFT|DATA_ANOMALY>",
+  "evidence_refs": [{"tool": "<工具名>", "summary": "<一句话证据>", "timestamp": "<ISO8601>"}],
+  "conflicting_evidence": <true 或 false>,
+  "proposed_actions": [{"action": "<ADVANCE|SPLIT|REPLAN|HUMAN>", "rationale": "<一句话理由>"}],
+  "needs_human": <true 或 false>,
+  "confidence": <0 到 1 之间的数>
+}
+约束：补货数量、价格、是否真正执行都不由你决定；evidence_refs 至少 1 条；
+只能引用输入里给出的因素与证据，不要新增事实。""")
 
 def build_signal(facts,score,detail,evidence):
     """给 LLM 的输入：量化信号 + 证据引用，不含自由文本污染。
@@ -79,10 +89,19 @@ def validate_diagnosis(obj):
         errors.append("needs_human 必须是布尔")
     return {"ok":not errors,"errors":errors}
 
-def diagnose(client,signal):
-    """调模型并校验；不合法时抛 ValueError，调用方转 SCHEMA_INVALID 并记审计。"""
-    raw=client.complete_json(SYSTEM_PROMPT,json.dumps(signal,ensure_ascii=False))
-    result=validate_diagnosis(raw)
-    if not result["ok"]:
-        raise ValueError("诊断输出不合法: "+"; ".join(result["errors"]))
-    return raw
+def diagnose(client,signal,max_retry=1):
+    """调模型并校验；按契约给 SCHEMA_INVALID 一次自修复机会，仍不合法才抛错。
+
+    第一次失败的原因会追加到提示词里，让模型自己修字段名——这比直接放弃更符合契约的重试上限（1 次）。
+    """
+    last_error=""
+    for attempt in range(max_retry+1):
+        prompt=SYSTEM_PROMPT
+        if attempt>0:
+            prompt+="\n上一次输出不合法，错误：%s\n请只修正字段名与结构后重新输出完整 JSON。"%last_error
+        raw=client.complete_json(prompt,json.dumps(signal,ensure_ascii=False))
+        result=validate_diagnosis(raw)
+        if result["ok"]:
+            return raw
+        last_error="; ".join(result["errors"])
+    raise ValueError("诊断输出不合法: "+last_error)

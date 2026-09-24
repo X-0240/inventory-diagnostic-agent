@@ -3,6 +3,7 @@
 契约 10.3：LLM 只能调用只读与计算类工具，输出必须是受限 schema。
 """
 import json
+import time
 import urllib.error
 import urllib.request
 
@@ -10,6 +11,31 @@ from inv_agent import config
 
 class LLMError(RuntimeError):
     pass
+
+USAGE_FILE=config.DATA_DIR/"llm_usage.jsonl"
+
+def today_calls():
+    """今日已调用次数：用于成本护栏，超上限直接停。"""
+    if not USAGE_FILE.exists():
+        return 0
+    today=time.strftime("%Y-%m-%d",time.gmtime())
+    count=0
+    for line in USAGE_FILE.read_text(encoding="utf-8").splitlines():
+        try:
+            rec=json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if rec.get("date")==today:
+            count+=1
+    return count
+
+def log_usage(model,prompt_chars,usage=None):
+    config.DATA_DIR.mkdir(parents=True,exist_ok=True)
+    rec={"date":time.strftime("%Y-%m-%d",time.gmtime()),
+         "ts":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),
+         "model":model,"prompt_chars":prompt_chars,"usage":usage}
+    with USAGE_FILE.open("a",encoding="utf-8") as f:
+        f.write(json.dumps(rec,ensure_ascii=False)+"\n")
 
 class LLMClient:
     def complete_json(self,system,user):
@@ -65,6 +91,8 @@ class OpenAICompatLLM(LLMClient):
         self.timeout=timeout
 
     def complete_json(self,system,user):
+        if today_calls()>=config.LLM_DAILY_CALL_BUDGET:
+            raise LLMError("RATE_LIMITED: 今日调用已达上限 "+str(config.LLM_DAILY_CALL_BUDGET)+" 次")
         body={"model":self.model,"temperature":0,
               "response_format":{"type":"json_object"},
               "messages":[{"role":"system","content":system},{"role":"user","content":user}]}
@@ -79,6 +107,7 @@ class OpenAICompatLLM(LLMClient):
         except Exception as e:
             raise LLMError("LLM 调用失败: "+type(e).__name__) from e
         text=payload["choices"][0]["message"]["content"]
+        log_usage(self.model,len(system)+len(user),payload.get("usage"))
         return json.loads(text)
 
 def get_client():

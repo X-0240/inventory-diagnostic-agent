@@ -24,6 +24,8 @@ GEN_WEEKS=int(os.getenv("GEN_WEEKS","40"))
 LLM_BASE_URL=os.getenv("LLM_BASE_URL","")
 LLM_API_KEY=os.getenv("LLM_API_KEY","")
 LLM_MODEL=os.getenv("LLM_MODEL","")
+#成本护栏：每天最多调用多少次真实模型（防重试/循环烧钱）
+LLM_DAILY_CALL_BUDGET=int(os.getenv("LLM_DAILY_CALL_BUDGET","50"))
 
 #计算层参数（设定值，非行业实测，写进 config_version 冻结）
 RULE_VERSION=os.getenv("RULE_VERSION","v1")
