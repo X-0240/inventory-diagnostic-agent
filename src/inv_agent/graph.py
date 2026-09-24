@@ -217,6 +217,62 @@ def build():
     g.add_edge("finish",END)
     return g.compile(checkpointer=_checkpointer())
 
+def run_period(period,limit=None,quota=None,force=False,actor="system",role="SYSTEM"):
+    """批量计划一个周期：CLI 与 HTTP 接口共用这一份实现。
+
+    步骤：抢 job_lock → 逐 SKU 评估 → 按影响金额取配额 → 连续确认后进诊断 →
+    逐 SKU 跑图落库 → 记录任务统计与审计。
+    """
+    from datetime import timedelta
+
+    from inv_agent import anomaly
+    job_id=repository.job_begin("plan_period",period,force=force)
+    if job_id is None:
+        return {"status":"SKIPPED","reason":"该周期已有成功或运行中的任务（job_lock）"}
+    start,_=pipeline.period_bounds(period)
+    prev=repository.prev_job_stats("plan_period",pipeline.period_of(start-timedelta(days=7)))
+    streaks=prev.get("streaks",{}) if isinstance(prev,dict) else {}
+    plans=[]
+    errors=[]
+    for sku in repository.active_skus(limit=limit):
+        try:
+            plans.append(pipeline.evaluate(sku,period))
+        except pipeline.PlanError as e:
+            errors.append({"sku":sku["sku_code"],"code":e.code,"message":str(e)})
+    candidates=[p for p in plans if pipeline.is_candidate(p)]
+    selected,_=anomaly.apply_quota(candidates,quota or config.ANOMALY_DAILY_QUOTA)
+    selected_keys={p["sku"]["sku_code"] for p in selected}
+    streaks_next={}
+    for p in plans:
+        code=p["sku"]["sku_code"]
+        streaks_next[code]=int(streaks.get(code,0))+1 if p in candidates else 0
+    confirmed={c for c,s in streaks_next.items() if s>=config.ANOMALY_CONFIRM_DAYS}
+    diagnose_set=selected_keys & confirmed
+    created=0
+    takeover=0
+    no_action=0
+    for p in plans:
+        code=p["sku"]["sku_code"]
+        result=run(code,period,mode="plan",diagnose=code in diagnose_set)
+        if result.get("errors"):
+            errors.extend([dict(e,sku=code) for e in result["errors"]])
+        if result.get("suggestion_id"):
+            created+=1
+            if result.get("guardrails",{}).get("ok") is False:
+                takeover+=1
+        else:
+            no_action+=1
+    stats={"skus":len(plans),"candidates":len(candidates),"quota_selected":len(selected),
+           "confirmed_diagnose":len(diagnose_set),"suggestions_created":created,
+           "manual_takeover":takeover,"no_action":no_action,"errors":len(errors),
+           "streaks":streaks_next,
+           "candidate_top":[{"sku":p["sku"]["sku_code"],"amount":p["amount"],"score":p["score"]}
+                            for p in candidates[:20]]}
+    repository.job_finish(job_id,"SUCCEEDED",stats)
+    repository.audit("period",0,"PERIOD_PLANNED",actor,role,stats)
+    return {"period":period,"job_id":job_id,"stats":stats,
+            "diagnosed":sorted(diagnose_set),"sample_errors":errors[:10]}
+
 GRAPH=None
 
 def run(sku_code,period,mode="plan",diagnose=True,actor="unknown",role="APPROVER"):

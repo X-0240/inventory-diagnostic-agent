@@ -65,3 +65,31 @@ def test_suggest_qty_rules():
 
 def test_impact_amount_rounding():
     assert compute.impact_amount(3,10.005)==30.02
+
+def test_median_helper():
+    assert compute.median([])==0.0
+    assert compute.median([3])==3
+    assert compute.median([1,2,3,4])==2.5
+
+def test_robust_sigma_resists_outlier():
+    #21 天里 20 天卖 10、1 天卖 10 万：MAD 为 0，但不应让 σ 被那个极值抬高
+    series=[10]*20+[100000]
+    assert compute.robust_sigma(series)==0.0
+    #样本标准差会被这个极值拉爆，作为对照
+    assert compute.stdev(series)>20000
+
+def test_robust_sigma_intermittent_model():
+    #20 天里只有 3 天有销量、单次规模 100：发生概率 0.15 → σ ≈ 100×√0.15
+    series=[0]*17+[100]*3
+    assert compute.robust_sigma(series)==pytest.approx(100*math.sqrt(0.15),rel=1e-6)
+
+def test_demand_sigma_has_floor():
+    baseline=10.0
+    sigma=compute.demand_sigma([10]*20+[100000],baseline)
+    assert sigma==pytest.approx(1.0)   #下限 = 均值 × 10%
+
+def test_winsorize_trims_tails():
+    series=[1,2,3,4,1000]
+    out=compute.winsorize(series)
+    assert max(out)<1000
+    assert len(out)==len(series)

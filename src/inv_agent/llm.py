@@ -29,6 +29,21 @@ def today_calls():
             count+=1
     return count
 
+def total_cost_cny():
+    """累计估算成本（元）：按记录的 token 用量与配置单价计算，用于预算护栏。"""
+    if not USAGE_FILE.exists():
+        return 0.0
+    total=0.0
+    for line in USAGE_FILE.read_text(encoding="utf-8").splitlines():
+        try:
+            rec=json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        usage=rec.get("usage") or {}
+        total+=(usage.get("prompt_tokens",0)/1_000_000)*config.LLM_PRICE_IN_CNY_PER_1M
+        total+=(usage.get("completion_tokens",0)/1_000_000)*config.LLM_PRICE_OUT_CNY_PER_1M
+    return round(total,4)
+
 def log_usage(model,prompt_chars,usage=None):
     config.DATA_DIR.mkdir(parents=True,exist_ok=True)
     rec={"date":time.strftime("%Y-%m-%d",time.gmtime()),
@@ -93,6 +108,8 @@ class OpenAICompatLLM(LLMClient):
     def complete_json(self,system,user):
         if today_calls()>=config.LLM_DAILY_CALL_BUDGET:
             raise LLMError("RATE_LIMITED: 今日调用已达上限 "+str(config.LLM_DAILY_CALL_BUDGET)+" 次")
+        if total_cost_cny()>=config.LLM_BUDGET_CNY:
+            raise LLMError("RATE_LIMITED: 累计成本已达上限 "+str(config.LLM_BUDGET_CNY)+" 元")
         body={"model":self.model,"temperature":0,
               "response_format":{"type":"json_object"},
               "messages":[{"role":"system","content":system},{"role":"user","content":user}]}

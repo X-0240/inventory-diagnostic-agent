@@ -12,3 +12,6 @@ pandas>=2.2.0
 openpyxl>=3.1.0
 # 测试
 pytest>=8.0.0
+# 接口层
+fastapi>=0.115.0
+uvicorn>=0.30.0

@@ -34,6 +34,51 @@ def stdev(series):
     var=sum((x-mean)**2 for x in series)/(n-1)
     return math.sqrt(var)
 
+def median(values):
+    if not values:
+        return 0.0
+    ordered=sorted(values)
+    n=len(ordered)
+    mid=n//2
+    return ordered[mid] if n%2 else (ordered[mid-1]+ordered[mid])/2
+
+def winsorize(series,lower_pct=0.05,upper_pct=0.95):
+    """按分位裁掉极端值：批发型数据里个别超大订单会把 σ 抬到不可用。"""
+    if not series:
+        return []
+    ordered=sorted(series)
+    n=len(ordered)
+    low=ordered[max(0,min(n-1,int(n*lower_pct)))]
+    high=ordered[max(0,min(n-1,int(n*upper_pct)-1))]
+    return [min(max(x,low),high) for x in series]
+
+def robust_sigma(series,intermittent_ratio=0.3):
+    """稳健离散度：间歇需求用"发生-规模"模型，其余用 MAD 估计。
+
+    - 间歇需求（有销量天数 < 30%）：σ ≈ 单次规模 × √发生概率
+    - 其余：σ = 1.4826 × MAD；MAD 为 0 时退回截尾样本标准差
+    """
+    if not series:
+        return 0.0
+    non_zero=[x for x in series if x>0]
+    if len(non_zero)<max(3,intermittent_ratio*len(series)):
+        p=len(non_zero)/len(series)
+        size=(sum(non_zero)/len(non_zero)) if non_zero else 0.0
+        return size*math.sqrt(p)
+    med=median(series)
+    mad=median([abs(x-med) for x in series])
+    sigma=1.4826*mad
+    if sigma>0:
+        return sigma
+    return stdev(winsorize(series))
+
+def demand_sigma(series,baseline,floor_ratio=0.1):
+    """实际使用的 σ：稳健估计 + 下限，避免极端裁剪后退化成 0 导致安全库存归零。"""
+    sigma=robust_sigma(series)
+    if sigma<=0:
+        sigma=stdev(winsorize(series))
+    return max(sigma,abs(baseline)*floor_ratio)
+
 def safety_stock(z,sigma,lead_time_days):
     """安全库存 = ceil(z × σ × √交期)。"""
     lt=max(lead_time_days,0)

@@ -9,37 +9,18 @@ import json
 import pytest
 
 from inv_agent import config, diagnosis, llm, pipeline, repository
-
-#预注册：每个场景在哪个周期最该被观察，以及"设计信号"的判定方式与最低可见比例
-SCENARIO_SPEC={
-    #促销场景在销量稀疏的 SKU 上会被零销量日冲淡，预注册阈值取 50% 并在此写明原因
-    "PROMOTION_SURGE":{"period":"2011-W11","signal":"surge_ratio>=1.2","min_ratio":0.5},
-    "SUPPLIER_DELAY":{"period":"2011-W30","signal":"leadtime_bias_days>=7","min_ratio":0.8},
-    #新品第 140 天（约 W20）才开始有销量，所以看 W21
-    "NEW_PRODUCT_NO_HISTORY":{"period":"2011-W21","signal":"days_with_sales<7","min_ratio":0.8},
-    "STOCKOUT_CASCADE":{"period":"2011-W30","signal":"coverage_days<=3","min_ratio":0.6},
-    #需求上移从第 105 天开始；近 28 天窗口要基本落在上移之后，W19 才对齐。
-    #min_ratio 是观察后的取值（实测 6/12）：一半 SKU 销量稀疏，1.6 倍水平变化落在噪声里，
-    #所以这条只当"信号可见性"证据，不当识别率结论。
-    "DEMAND_SHIFT":{"period":"2011-W19","signal":"shift_ratio>=1.2","min_ratio":0.5},
-    "DATA_ANOMALY":{"period":"2011-W30","signal":"zero_days_7>=2","min_ratio":0.6},
-}
+from inv_agent.scenarios import (SCENARIO_SPEC, load_scenarios, split_for_scenario)
 
 def _scenarios():
-    path=config.DATA_DIR/"scenarios.json"
-    if not path.exists():
+    mapping=load_scenarios()
+    if not mapping:
         pytest.skip("缺少 data/scenarios.json，先跑 python -m inv_agent.data_pipeline --build")
-    return json.loads(path.read_text(encoding="utf-8"))
-
-def _split(codes):
-    """调参集 / held-out 各半：排序后奇偶分，可复现。"""
-    ordered=sorted(codes)
-    return ordered[0::2],ordered[1::2]
+    return mapping
 
 def _samples(scenario,period,limit=6):
     scenarios=_scenarios()
     codes=[c for c,s in scenarios.items() if s==scenario]
-    dev,held_out=_split(codes)
+    dev,held_out=split_for_scenario(scenario,codes)
     out=[]
     for label,group in (("dev",dev),("held_out",held_out)):
         for code in group[:limit]:

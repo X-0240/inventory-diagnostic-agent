@@ -19,7 +19,11 @@ def dumps(obj):
     return json.dumps(obj,ensure_ascii=False,default=json_default)
 
 def active_skus(limit=None):
-    sql="SELECT id,sku_code,name,supplier_id,unit_cost,price,lead_time_days,moq,pack_size,service_level FROM sku WHERE status='ACTIVE' ORDER BY id"
+    #只取有库存快照的 SKU：测试残留或半灌数据不会进批量扫描，避免刷一堆 NOT_FOUND
+    sql=("SELECT k.id,k.sku_code,k.name,k.supplier_id,k.unit_cost,k.price,k.lead_time_days,"
+         "k.moq,k.pack_size,k.service_level FROM sku k "
+         "WHERE k.status='ACTIVE' AND EXISTS (SELECT 1 FROM inventory_snapshot i WHERE i.sku_id=k.id) "
+         "ORDER BY k.id")
     if limit:
         sql+=" LIMIT "+str(int(limit))
     return db.query_all(sql)

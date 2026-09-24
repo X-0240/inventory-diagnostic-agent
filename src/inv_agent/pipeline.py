@@ -45,7 +45,8 @@ def load_facts(sku,period,warehouse_id):
     date_span=config.BASELINE_WINDOW_DAYS
     missing_days=max(0,date_span-len(qty_series))
     baseline=compute.moving_average(qty_series,config.BASELINE_WINDOW_DAYS)
-    sigma=compute.stdev(qty_series)
+    #v1.1：改用稳健离散度，避免批发型极端订单把安全库存抬高
+    sigma=compute.demand_sigma(qty_series,baseline)
     z=compute.z_for_service_level(float(sku["service_level"]))
     safety=compute.safety_stock(z,sigma,int(sku["lead_time_days"]))
     rop=compute.reorder_point(baseline,int(sku["lead_time_days"]),safety)

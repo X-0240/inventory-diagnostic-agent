@@ -26,13 +26,20 @@ def test_sku(db_ready):
         cur.execute("SELECT id FROM sku WHERE sku_code=%s",(TEST_SKU,))
         sku_id=cur.fetchone()["id"]
     yield {"sku_id":sku_id,"supplier_id":supplier_id}
-    #清理业务数据（审计表按契约不可删除，测试痕迹会留在审计里）
+    #清理测试数据：必须把 sku/supplier 也删掉，否则残留会污染后面的批量扫描
+    #（审计表按契约不可删除，测试痕迹会留在审计里）
     with db.tx() as cur:
+        cur.execute("DELETE FROM inbound_order WHERE sku_id=%s",(sku_id,))
         cur.execute("DELETE FROM purchase_order WHERE sku_id=%s",(sku_id,))
         cur.execute("DELETE FROM approval_record WHERE suggestion_id IN "
                     "(SELECT id FROM replenishment_suggestion WHERE sku_id=%s)",(sku_id,))
         cur.execute("DELETE FROM replenishment_suggestion WHERE sku_id=%s",(sku_id,))
         cur.execute("DELETE FROM exception_case WHERE sku_id=%s",(sku_id,))
+        cur.execute("DELETE FROM policy_snapshot WHERE sku_id=%s",(sku_id,))
+        cur.execute("DELETE FROM inventory_snapshot WHERE sku_id=%s",(sku_id,))
+        cur.execute("DELETE FROM sales_daily WHERE sku_id=%s",(sku_id,))
+        cur.execute("DELETE FROM sku WHERE id=%s",(sku_id,))
+        cur.execute("DELETE FROM supplier WHERE id=%s",(supplier_id,))
 
 def _make_suggestion(test_sku,period,qty=10,hash_seed="a",status="PENDING_APPROVAL"):
     sku=repository.get_sku(test_sku["sku_id"])

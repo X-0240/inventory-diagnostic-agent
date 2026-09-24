@@ -26,53 +26,8 @@ def _prev_period(period):
     return pipeline.period_of(start-timedelta(days=7))
 
 def cmd_plan_period(args):
-    period=args.period
-    job_id=repository.job_begin("plan_period",period,force=bool(args.force))
-    if job_id is None:
-        print(json.dumps({"status":"SKIPPED","reason":"该周期已有成功或运行中的任务（job_lock）"},
-                         ensure_ascii=False))
-        return
-    prev=repository.prev_job_stats("plan_period",_prev_period(period))
-    streaks=prev.get("streaks",{}) if isinstance(prev,dict) else {}
-    plans=[]
-    errors=[]
-    for sku in repository.active_skus(limit=args.limit):
-        try:
-            plans.append(pipeline.evaluate(sku,period))
-        except pipeline.PlanError as e:
-            errors.append({"sku":sku["sku_code"],"code":e.code,"message":str(e)})
-    candidates=[p for p in plans if pipeline.is_candidate(p)]
-    selected,_=anomaly.apply_quota(candidates,args.quota or config.ANOMALY_DAILY_QUOTA)
-    selected_keys={p["sku"]["sku_code"] for p in selected}
-    new_streaks={}
-    for p in plans:
-        code=p["sku"]["sku_code"]
-        new_streaks[code]=int(streaks.get(code,0))+1 if p in candidates else 0
-    confirmed={c for c,streak in new_streaks.items() if streak>=config.ANOMALY_CONFIRM_DAYS}
-    diagnose_set=selected_keys & confirmed
-    created=0
-    takeover=0
-    no_action=0
-    for p in plans:
-        code=p["sku"]["sku_code"]
-        result=graph.run(code,period,mode="plan",diagnose=code in diagnose_set)
-        if result.get("errors"):
-            errors.extend([dict(e,sku=code) for e in result["errors"]])
-        if result.get("suggestion_id"):
-            created+=1
-            if result.get("guardrails",{}).get("ok") is False:
-                takeover+=1
-        else:
-            no_action+=1
-    stats={"skus":len(plans),"candidates":len(candidates),"quota_selected":len(selected),
-           "confirmed_diagnose":len(diagnose_set),"suggestions_created":created,
-           "manual_takeover":takeover,"no_action":no_action,"errors":len(errors),"streaks":new_streaks,
-           "candidate_top":[{"sku":p["sku"]["sku_code"],"amount":p["amount"],"score":p["score"]}
-                            for p in candidates[:20]]}
-    repository.job_finish(job_id,"SUCCEEDED",stats)
-    repository.audit("period",0,"PERIOD_PLANNED","system","SYSTEM",stats)
-    print(json.dumps({"period":period,"job_id":job_id,"stats":stats,
-                      "diagnosed":sorted(diagnose_set),"errors":errors[:10]},
+    print(json.dumps(graph.run_period(args.period,limit=args.limit,quota=args.quota,
+                                      force=bool(args.force)),
                      ensure_ascii=False,indent=2))
 
 def cmd_list(args):

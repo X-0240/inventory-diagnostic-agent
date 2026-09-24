@@ -92,8 +92,10 @@ def seed_reference(grouped,top,price):
         })
     with db.tx() as cur:
         cur.execute("SET FOREIGN_KEY_CHECKS=0")
+        #重灌必须连 job_run 一起清：否则旧周期显示 SUCCEEDED，会把重跑的周期锁死
         for table in ("replenishment_suggestion","approval_record","inbound_order","purchase_order",
-                      "inventory_snapshot","sales_daily","exception_case","policy_snapshot","sku","supplier"):
+                      "inventory_snapshot","sales_daily","exception_case","policy_snapshot",
+                      "job_run","sku","supplier"):
             cur.execute("DELETE FROM "+table)
         cur.execute("TRUNCATE TABLE audit_event")
         cur.execute("SET FOREIGN_KEY_CHECKS=1")
@@ -205,7 +207,7 @@ def simulate(scenarios,mapping):
         #模拟器与计算层用同一套策略（含安全库存），否则基线不公平
         hist_window=[q for q in series[:28] if q>0]
         seed_baseline=(sum(hist_window)/len(hist_window)) if hist_window else 1.0
-        seed_sigma=compute.stdev(hist_window)
+        seed_sigma=compute.demand_sigma(series[:28],seed_baseline)
         lead_time=int(sku["lead_time_days"])
         z_value=compute.z_for_service_level(float(sku["service_level"]))
         safety=compute.safety_stock(z_value,seed_sigma,lead_time)

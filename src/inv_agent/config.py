@@ -26,6 +26,10 @@ LLM_API_KEY=os.getenv("LLM_API_KEY","")
 LLM_MODEL=os.getenv("LLM_MODEL","")
 #成本护栏：每天最多调用多少次真实模型（防重试/循环烧钱）
 LLM_DAILY_CALL_BUDGET=int(os.getenv("LLM_DAILY_CALL_BUDGET","50"))
+#成本护栏：累计金额上限（元）与单价（元/百万 token，设定值，需按官方价目核对）
+LLM_BUDGET_CNY=float(os.getenv("LLM_BUDGET_CNY","20"))
+LLM_PRICE_IN_CNY_PER_1M=float(os.getenv("LLM_PRICE_IN_CNY_PER_1M","2.0"))
+LLM_PRICE_OUT_CNY_PER_1M=float(os.getenv("LLM_PRICE_OUT_CNY_PER_1M","8.0"))
 
 #计算层参数（设定值，非行业实测，写进 config_version 冻结）
 RULE_VERSION=os.getenv("RULE_VERSION","v1")
