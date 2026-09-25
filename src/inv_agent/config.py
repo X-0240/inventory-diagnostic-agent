@@ -14,6 +14,13 @@ DB_NAME=os.getenv("MYSQL_DATABASE","inventory")
 DB_USER=os.getenv("MYSQL_APP_USER","inv_app")
 DB_PASSWORD=os.getenv("MYSQL_APP_PASSWORD","")
 
+#载体（上游事实源）：table=直读本地库（默认），http=调 commerce-core 载体服务
+OMS_MODE=os.getenv("OMS_MODE","table")
+COMMERCE_BASE_URL=os.getenv("COMMERCE_BASE_URL","http://127.0.0.1:8001")
+COMMERCE_API_TOKEN=os.getenv("COMMERCE_API_TOKEN","local-commerce-token")
+#载体超时判成 UPSTREAM_TIMEOUT（不可用≠没数据）；重试与否由编排层策略决定
+COMMERCE_TIMEOUT_SECONDS=float(os.getenv("COMMERCE_TIMEOUT_SECONDS","5"))
+
 #数据生成参数（契约 7：对照实验前冻结并预注册）
 GEN_SEED=int(os.getenv("GEN_SEED","20260924"))
 GEN_SKU_LIMIT=int(os.getenv("GEN_SKU_LIMIT","200"))

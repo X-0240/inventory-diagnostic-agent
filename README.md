@@ -50,6 +50,21 @@ LLM 只在异常 SKU 上做假设生成、证据收集与整理、是否需要�
 | 稳健 σ 多种子 | 5 组扰动（库存初值 0.9–1.1 × 交期 ±2 天）下结论方向**全部一致**：缺货率 +4.87~+5.48 个百分点、库存 −28%~−33% | `docs/稳健σ对照_20260926.md` |
 | 未启用能力归档 | 偏好记忆模块移出生产路径，存 `experiments/preference_memory/` 并注明为什么不接 | `experiments/preference_memory/README.md` |
 
+## v1.5 变更（相对 v1.4，载体边界）
+
+| 项 | 结论与数字 | 证据位置 |
+|---|---|---|
+| 载体服务 | 新增 `commerce-core`：独立库 `commerce` + 独立账号 `commerce_svc`；5 个接口（商品与参数、库存快照、在途、销量、收货确认）+ 交期偏差接口 | `src/commerce_core/`、`migrations/commerce/001_schema.sql` |
+| 事实源适配器 | Agent 侧 `OMS_MODE=table\|http` 两种模式返回同一份行结构，**业务逻辑不改** | `src/inv_agent/facts.py` |
+| 换源等价 | 全量 200 个 SKU、周期 W31：数量/金额/内容哈希 **200/200 一致** | `tests/test_commerce_boundary.py` |
+| 上游不可用 | 判 `UPSTREAM_TIMEOUT`（不是 NOT_FOUND）；商品清单都拉不到时任务判 FAILED + 写审计，不留悬锁 | 同上、`docs/载体边界_20260926.md` |
+| 账号隔离 | Agent 账号读载体库被拒（负向用例守着，不是口头边界） | 同上 |
+| 收货确认 | 幂等键命中返回原流水、库存只加一次；收货量超在途被拒（409 `QTY_OUT_OF_RANGE`） | 同上 |
+| 投影性能 | 逐行 INSERT >450 秒 → `executemany` **5.4 秒**（约 5.8 万行） | `scripts/project_to_commerce.py` |
+
+一期边界：载体是本地模拟的上游（数据由同一份模拟结果投影，两库同源）；复算指标仍读本地投影。
+真实业务里采购单权威在上游 ERP，那是**二期（选项 2）**：幂等键跨系统传递、超时回查、定期对账。
+
 ## 快速开始
 
 ```bash
@@ -79,6 +94,12 @@ PYTHONPATH=src .venv/Scripts/python -m inv_agent.cli recover
 
 #8 测试
 PYTHONPATH=src .venv/Scripts/python -m pytest tests -q
+
+#9 载体服务（可选：走 "Agent 只读上游" 的模式）
+.venv/Scripts/python scripts/migrate_commerce.py      # 建载体库与独立账号（幂等）
+.venv/Scripts/python scripts/project_to_commerce.py   # 把本地生成的事实投影进载体库
+PYTHONPATH=src .venv/Scripts/python -m uvicorn commerce_core.api:app --port 8001
+OMS_MODE=http PYTHONPATH=src .venv/Scripts/python -m inv_agent.cli plan-period --period 2011-W31 --force
 
 #9 接口层（另开终端；接口用请求头 X-Actor / X-Role 传身份，只做权限矩阵校验）
 PYTHONPATH=src .venv/Scripts/python -m uvicorn inv_agent.api:app --port 8100

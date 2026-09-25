@@ -7,12 +7,9 @@ import hashlib
 import json
 from datetime import date, timedelta
 
-from inv_agent import anomaly, compute, config, db, guardrails, repository
-
-class PlanError(RuntimeError):
-    def __init__(self,code,message):
-        super().__init__(message)
-        self.code=code
+from inv_agent import anomaly, compute, config, db, facts, guardrails, repository
+#PlanError 挪到 errors.py（facts 也要用，避免循环导入）；这里保留同名导出
+from inv_agent.errors import PlanError
 
 def period_bounds(period):
     """ISO 周字符串（2011-W05）→ (周一, 周日)。"""
@@ -32,14 +29,16 @@ def list_periods(limit=None):
 def load_facts(sku,period,warehouse_id):
     """取该 SKU 在该周期开始时点的事实；每类事实都带来源，便于写进 basis。"""
     start,end=period_bounds(period)
-    inv=repository.latest_inventory(sku["id"],warehouse_id)
+    #事实一律经 facts 适配器取：table 直读本地库，http 走载体接口
+    src=facts.source()
+    inv=src.get_inventory(sku,warehouse_id)
     if not inv:
         raise PlanError("NOT_FOUND","缺少库存快照 sku="+str(sku["id"]))
     if (start-inv["snapshot_date"]).days>7:
         raise PlanError("STALE_DATA","库存快照过期: "+str(inv["snapshot_date"]))
-    supplier=repository.get_supplier(sku["supplier_id"])
+    supplier=src.get_supplier(sku)
     #取 8 周历史：近 7 天 / 近 28 天 / 前 28 天，用来区分"短期突增"和"需求水平上移"
-    series=repository.sales_series(sku["id"],start-timedelta(days=1),config.BASELINE_WINDOW_DAYS*2)
+    series=src.get_sales_series(sku,start-timedelta(days=1),config.BASELINE_WINDOW_DAYS*2)
     qty_series=[int(r["qty"]) for r in series]
     days_with_sales=len([q for q in qty_series[-config.BASELINE_WINDOW_DAYS:] if q>0])
     date_span=config.BASELINE_WINDOW_DAYS
@@ -52,14 +51,11 @@ def load_facts(sku,period,warehouse_id):
     rop=compute.reorder_point(baseline,int(sku["lead_time_days"]),safety)
     target=compute.target_qty(baseline,int(sku["lead_time_days"]),config.REVIEW_PERIOD_DAYS,z,sigma)
     available=int(inv["qty_on_hand"])-int(inv["qty_reserved"])
-    due=repository.inbound_due(sku["id"],start+timedelta(days=int(sku["lead_time_days"])))
+    due=src.get_inbound_due(sku,start+timedelta(days=int(sku["lead_time_days"])))
     recent7=qty_series[-7:]
     recent28=qty_series[-28:]
     prior28=qty_series[-56:-28]
-    bias_rows=db.query_all("SELECT DATEDIFF(actual_date,expected_date) AS bias FROM inbound_order "
-                           "WHERE sku_id=%s AND status='RECEIVED' AND actual_date IS NOT NULL "
-                           "ORDER BY id DESC LIMIT 10",(sku["id"],))
-    biases=[int(r["bias"]) for r in bias_rows if r["bias"] is not None]
+    biases=src.get_leadtime_bias(sku,10)
     return {
         "sku":sku,"period":period,"warehouse_id":warehouse_id,
         "period_start":start,"period_end":end,

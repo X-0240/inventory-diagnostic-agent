@@ -14,7 +14,7 @@ from typing import Any, Optional, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
-from inv_agent import (config, diagnosis, executor, guardrails, llm, metrics, pipeline,
+from inv_agent import (config, diagnosis, executor, facts, guardrails, llm, metrics, pipeline,
                        repository)
 
 class RunState(TypedDict, total=False):
@@ -238,12 +238,36 @@ def run_period(period,limit=None,quota=None,force=False,actor="system",role="SYS
     streaks=prev.get("streaks",{}) if isinstance(prev,dict) else {}
     plans=[]
     errors=[]
-    for sku in repository.active_skus(limit=limit):
+    #商品清单也走事实源：http 模式下 SKU 集合与参数都来自载体
+    src=facts.source()
+    for code in getattr(src,"skipped",[]):
+        errors.append({"sku":code,"code":"NOT_FOUND","message":"载体有该商品但本地无引用行"})
+    try:
+        products=src.list_products(limit=limit)
+    except pipeline.PlanError as e:
+        #上游连商品清单都给不出来：任务立刻判失败，不能让 job_lock 悬在 RUNNING
+        repository.job_finish(job_id,"FAILED",{"skus":0,"errors":1},
+                              error_code=e.code,last_error=str(e)[:240])
+        repository.audit("period",0,"PERIOD_PLAN_FAILED",actor,role,
+                         {"errors":[{"code":e.code,"message":str(e)}]})
+        return {"period":period,"job_id":job_id,"status":"FAILED",
+                "stats":{"skus":0,"errors":1,"error_code":e.code},
+                "diagnosed":[],"sample_errors":[{"code":e.code,"message":str(e)}]}
+    for sku in products:
         try:
             plans.append(pipeline.evaluate(sku,period))
         except pipeline.PlanError as e:
             errors.append({"sku":sku["sku_code"],"code":e.code,"message":str(e)})
     candidates=[p for p in plans if pipeline.is_candidate(p)]
+    if not plans and errors:
+        #一个 SKU 都没评估出来（典型：载体全挂）：任务必须判失败，不能报成功
+        code=errors[0]["code"]
+        repository.job_finish(job_id,"FAILED",{"skus":0,"errors":len(errors)},
+                              error_code=code,last_error=errors[0]["message"][:240])
+        repository.audit("period",0,"PERIOD_PLAN_FAILED",actor,role,{"errors":errors[:10]})
+        return {"period":period,"job_id":job_id,"status":"FAILED",
+                "stats":{"skus":0,"errors":len(errors),"error_code":code},
+                "diagnosed":[],"sample_errors":errors[:10]}
     selected,_=anomaly.apply_quota(candidates,quota or config.ANOMALY_DAILY_QUOTA)
     selected_keys={p["sku"]["sku_code"] for p in selected}
     streaks_next={}

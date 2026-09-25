@@ -1,5 +1,10 @@
 # 本地开发用 MySQL 8（契约要求：数据库必须 MySQL，且要能看到慢查询）
 # 时区固定 UTC，与契约「库内 UTC、展示按 Asia/Shanghai」一致
+#
+# 三个服务：mysql（两库）、commerce-core（载体）、agent-api（Agent 接口）
+# 注意：commerce 库不在 docker-entrypoint-initdb.d 的自动执行范围内（该目录不递归子目录），
+#      首次建库要手动跑 scripts/migrate_commerce.py；载体数据用 scripts/project_to_commerce.py 投影。
+#      容器路径需要能拉取 python:3.12-slim；本地已验证的跑法是宿主机 venv + 本文件只起 mysql。
 services:
   mysql:
     image: mysql:8.4
@@ -31,5 +36,46 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+
+  commerce-core:
+    build: .
+    container_name: commerce-core
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      MYSQL_PORT: 3306
+      COMMERCE_DB_NAME: ${COMMERCE_DB_NAME:-commerce}
+      COMMERCE_SVC_USER: ${COMMERCE_SVC_USER:-commerce_svc}
+      COMMERCE_SVC_PASSWORD: ${COMMERCE_SVC_PASSWORD:-commerce_local_svc}
+      COMMERCE_API_TOKEN: ${COMMERCE_API_TOKEN:-local-commerce-token}
+      TZ: UTC
+    command: ["uvicorn","commerce_core.api:app","--host","0.0.0.0","--port","8001"]
+    ports:
+      - "8001:8001"
+
+  agent-api:
+    build: .
+    container_name: agent-api
+    restart: unless-stopped
+    depends_on:
+      - commerce-core
+    environment:
+      DB_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-inventory}
+      MYSQL_APP_USER: ${MYSQL_APP_USER:-inv_app}
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD}
+      #容器内固定走载体：这条路径才是"Agent 只读上游"的形态
+      OMS_MODE: http
+      COMMERCE_BASE_URL: http://commerce-core:8001
+      COMMERCE_API_TOKEN: ${COMMERCE_API_TOKEN:-local-commerce-token}
+      LLM_FORCE_STUB: ${LLM_FORCE_STUB:-1}
+      TZ: UTC
+    command: ["uvicorn","inv_agent.api:app","--host","0.0.0.0","--port","8000"]
+    ports:
+      - "8000:8000"
 volumes:
   mysql_data:
