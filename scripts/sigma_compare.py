@@ -12,6 +12,7 @@
 """
 import json
 import statistics
+import argparse
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -33,7 +34,7 @@ def load_series(limit=SKU_LIMIT):
         series[r["id"]]={"sku":r,"days":{s["sale_date"]:int(s["qty"]) for s in sales}}
     return series
 
-def replay(item,sigma_fn):
+def replay(item,sigma_fn,initial_factor=1.0,leadtime_shift=0):
     """按给定 σ 估计回放一个 SKU，返回该 SKU 的指标。"""
     sku=item["sku"]
     days=sorted(item["days"])
@@ -63,7 +64,7 @@ def replay(item,sigma_fn):
             safety=compute.safety_stock(z,sigma,int(sku["lead_time_days"]))
             rop=compute.reorder_point(baseline,int(sku["lead_time_days"]),safety)
             target=compute.target_qty(baseline,int(sku["lead_time_days"]),REVIEW,z,sigma)
-            on_hand=int(target+rop)
+            on_hand=int((target+rop)*initial_factor)
         if demand>0:
             demand_days+=1
             if on_hand<=0:
@@ -91,7 +92,8 @@ def replay(item,sigma_fn):
             if qty>0:
                 orders+=1
                 order_qty_total+=qty
-                in_transit.append((qty,day+timedelta(days=int(sku["lead_time_days"]))))
+                lead=max(1,int(sku["lead_time_days"])+leadtime_shift)
+                in_transit.append((qty,day+timedelta(days=lead)))
     avg_inv=inventory_sum/inventory_days if inventory_days else 0
     return {"sku":sku["sku_code"],"demand_days":demand_days,"stockout_days":stockout_days,
             "stockout_rate":round(stockout_days/demand_days,4) if demand_days else 0.0,
@@ -126,12 +128,27 @@ def summarize(rows):
     }
 
 def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--seeds",type=int,default=1,
+                        help="跑几组扰动（库存初值 0.9/1.0/1.1 与交期 ±2 天组合），默认 1 组")
+    args=parser.parse_args()
     series=load_series()
     print("回放 SKU 数:",len(series))
-    old_rows=[r for r in (replay(v,sigma_old) for v in series.values()) if r]
-    new_rows=[r for r in (replay(v,sigma_new) for v in series.values()) if r]
+    #扰动组合：库存初值系数 × 交期偏移；多种子用来检查结论是否只在某组参数下成立
+    combos=[(1.0,0)]
+    if args.seeds>1:
+        combos=[(0.9,-2),(1.0,0),(1.1,2),(0.95,1),(1.05,-1)][:args.seeds]
+    seed_rows=[]
+    for factor,shift in combos:
+        old_one=summarize([r for r in (replay(v,sigma_old,factor,shift) for v in series.values()) if r])
+        new_one=summarize([r for r in (replay(v,sigma_new,factor,shift) for v in series.values()) if r])
+        seed_rows.append({"factor":factor,"leadtime_shift":shift,"old":old_one,"new":new_one})
+        print("   扰动 库存初值×%.2f 交期%+d 天：缺货率 %.2f%% → %.2f%%；平均库存 %.1f → %.1f"%(
+            factor,shift,old_one["stockout_rate"]*100,new_one["stockout_rate"]*100,
+            old_one["avg_inventory_median"],new_one["avg_inventory_median"]))
+    old,new=seed_rows[0]["old"],seed_rows[0]["new"]
     mid_rows=[r for r in (replay(v,sigma_mid) for v in series.values()) if r]
-    old,new,mid=summarize(old_rows),summarize(new_rows),summarize(mid_rows)
+    mid=summarize(mid_rows)
     lines=["# 稳健 σ 前后对照（仿真回放）","",
            "生成时间：%s"%date.today().isoformat(),
            "口径：同一批真实销量、同一组参数（交期/服务水平/MOQ/包装/复核周期/库存上限），唯一变量是 σ 估计方式。",
@@ -150,6 +167,17 @@ def main():
                                                             mid["avg_inventory_median"]),
            "| 下单次数合计 | %d | %d | %d |"%(old["orders_total"],new["orders_total"],mid["orders_total"]),
            "| 下单量合计 | %d | %d | %d |"%(old["order_qty_total"],new["order_qty_total"],mid["order_qty_total"]),
+           "",
+           "## 多种子扰动检查（%d 组）"%len(seed_rows),"",
+           "| 扰动 | 缺货率（旧→新） | 平均库存中位数（旧→新） | 结论方向是否一致 |",
+           "|---|---|---|---|",
+           ]+[
+           "| 库存初值×%.2f、交期%+d 天 | %.2f%% → %.2f%% | %.1f → %.1f | %s |"%(
+               s["factor"],s["leadtime_shift"],s["old"]["stockout_rate"]*100,s["new"]["stockout_rate"]*100,
+               s["old"]["avg_inventory_median"],s["new"]["avg_inventory_median"],
+               "是" if (s["new"]["stockout_rate"]>=s["old"]["stockout_rate"]
+                        and s["new"]["avg_inventory_median"]<=s["old"]["avg_inventory_median"]) else "否")
+           for s in seed_rows]+[
            "",
            "## 结论与取舍","",
            "- 稳健 σ 达到了设计目的：平均在手库存中位数从 %.1f 降到 %.1f（−%.0f%%），"

@@ -16,6 +16,16 @@ from inv_agent import config, db, llm, pipeline, repository
 
 INTENTS=("CHECK_STOCK","PLAN_REPLENISH","EXPLAIN_DECISION")
 REQUIRED_FIELDS=("intent","sku_query","period_hint")
+#商品编号形态：字母前缀 + 数字，或 4-6 位纯数字（避免把年份、周期里的数字当成编号）
+ENTITY_RE=re.compile(r"(?<![A-Za-z0-9])([A-Z]{1,4}-?\d{3,8}|(?<!\d)\d{4,6}(?!\d))")
+
+def strip_time_expr(text):
+    """去掉时间表达，避免把 2011-W21 里的年份当商品编号。"""
+    out=re.sub(r"\d{4}-W\d{1,2}"," ",text or "",flags=re.I)
+    return re.sub(r"上上周|上周|本周|这周|下周|下个周期"," ",out)
+
+def count_entities(text):
+    return sorted(set(ENTITY_RE.findall(strip_time_expr(text))))
 
 SYSTEM_PROMPT="""你是库存诉求解析器。把用户的话解析成结构化参数，只输出 JSON，字段名一字不改：
 {
@@ -112,9 +122,8 @@ class StubParser:
                     hint=token
                     break
         #先剥掉时间表达再抽商品编号，否则"2011-W21"里的年份会被当成商品号
-        stripped=re.sub(r"\d{4}-W\d{1,2}"," ",text,flags=re.I)
-        stripped=re.sub(r"上上周|上周|本周|这周|下周|下个周期"," ",stripped)
-        code=re.search(r"(?<![A-Za-z0-9])([A-Z]{1,4}-?\d{3,8}|(?<!\d)\d{4,6}(?!\d))",stripped)
+        stripped=strip_time_expr(text)
+        code=ENTITY_RE.search(stripped)
         return {"intent":intent,"sku_query":code.group(1) if code else "","period_hint":hint}
 
 def parse(text,client=None):
@@ -127,6 +136,13 @@ def parse(text,client=None):
     check=validate(raw)
     if not check["ok"]:
         return {"ok":False,"code":"SCHEMA_INVALID","errors":check["errors"]}
+    #一次请求提到多个商品时不允许猜：要么让用户分开问，要么走人工确认
+    #多实体判定看原文（去时间表达后），不能只看模型抽出来的 sku_query——桩只填第一个编号
+    entity_hits=count_entities(text)
+    if len(entity_hits)>=2:
+        return {"ok":False,"code":"AMBIGUOUS","intent":raw["intent"],
+                "entities":entity_hits,
+                "message":"一次请求提到多个商品（%s），请分开问或指定其一"%"、".join(entity_hits)}
     sku_result=resolve_sku(raw.get("sku_query",""))
     if sku_result["status"]=="AMBIGUOUS":
         return {"ok":False,"code":"AMBIGUOUS","intent":raw["intent"],
