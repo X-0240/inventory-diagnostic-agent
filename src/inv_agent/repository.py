@@ -97,6 +97,21 @@ def suggestion_by_hash(sku_id,period,content_hash):
                         "WHERE sku_id=%s AND period=%s AND content_hash=%s",
                         (sku_id,period,content_hash))
 
+def enrich_diagnosis(suggestion_id,diagnosis,case_id=None):
+    """给已存在的建议补写归因结论（幂等重放场景）。
+
+    只补不覆盖：仅当 hypothesis_type 为空时写入，避免把已经定稿的归因改掉。
+    """
+    with db.tx() as cur:
+        cur.execute("UPDATE replenishment_suggestion SET hypothesis_type=%s,evidence_refs=%s,"
+                    "conflicting_evidence=%s,proposed_actions=%s,confidence=%s,"
+                    "case_id=COALESCE(case_id,%s) WHERE id=%s AND hypothesis_type IS NULL",
+                    (diagnosis["hypothesis_type"],dumps(diagnosis["evidence_refs"]),
+                     1 if diagnosis["conflicting_evidence"] else 0,
+                     dumps(diagnosis["proposed_actions"]),float(diagnosis["confidence"]),
+                     case_id,suggestion_id))
+        return cur.rowcount
+
 def get_suggestion(suggestion_id):
     return db.query_one("SELECT * FROM replenishment_suggestion WHERE id=%s",(suggestion_id,))
 

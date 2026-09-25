@@ -7,7 +7,7 @@
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from inv_agent import config, executor, graph, metrics, pipeline, repository
+from inv_agent import config, executor, graph, intake, metrics, pipeline, repository
 
 ROLES=("BUYER","APPROVER","SUPERVISOR","ADMIN")
 
@@ -36,6 +36,10 @@ class PlanRequest(BaseModel):
     limit:int|None=None
     quota:int|None=None
     force:bool=False
+
+class IntakeRequest(BaseModel):
+    text:str
+    run:bool=False     #True 时解析成功后直接跑一次计划（会落库）
 
 @app.get("/health")
 def health():
@@ -109,3 +113,12 @@ def recover(actor:ActorContext=Depends(current_actor)):
     if actor.role!="ADMIN" and actor.role!="SUPERVISOR":
         raise HTTPException(status_code=403,detail="恢复操作只允许 ADMIN 或 SUPERVISOR")
     return executor.recover()
+
+@app.post("/intake")
+def intake_request(body:IntakeRequest,actor:ActorContext=Depends(current_actor)):
+    """自然语言入口：把诉求解析成结构化参数（可选直接跑计划）。"""
+    result=intake.answer(body.text) if body.run else intake.parse(body.text)
+    if not result["ok"]:
+        status={"SCHEMA_INVALID":422,"AMBIGUOUS":409,"NOT_FOUND":404,"UPSTREAM_TIMEOUT":504}.get(result["code"],400)
+        raise HTTPException(status_code=status,detail=result)
+    return result

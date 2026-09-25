@@ -172,11 +172,19 @@ def persist_plan(plan,diagnosis=None,case_id=None,status="PENDING_APPROVAL",viol
     if existing:
         #同 SKU 同周期已有活跃建议：内容相同则幂等返回，内容不同则标为被取代
         if existing["content_hash"]==plan["content_hash"]:
+            if diagnosis and existing.get("hypothesis_type") is None:
+                #补写归因：早先那轮可能没有诊断，或诊断结论因为状态通道问题丢过
+                rows=repository.enrich_diagnosis(existing["id"],diagnosis,case_id)
+                if rows:
+                    repository.audit("suggestion",existing["id"],"DIAGNOSIS_ENRICHED","system","SYSTEM",
+                                     {"hypothesis":diagnosis["hypothesis_type"]})
             return {"suggestion_id":existing["id"],"replayed":True,"status":existing["status"]}
         repository.supersede_others(sku["id"],plan["period"],existing["id"])
     dup=repository.suggestion_by_hash(sku["id"],plan["period"],plan["content_hash"])
     if dup:
         #非活跃历史版本也是同内容：按幂等返回，避免撞唯一键
+        if diagnosis:
+            repository.enrich_diagnosis(dup["id"],diagnosis,case_id)
         return {"suggestion_id":dup["id"],"replayed":True,"status":dup["status"]}
     hypothesis=None
     evidence=None

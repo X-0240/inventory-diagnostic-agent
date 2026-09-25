@@ -25,6 +25,7 @@ class RunState(TypedDict, total=False):
     role: str
     decision: str
     plan: dict
+    diagnosis: dict          #必须声明：LangGraph 只跟踪声明过的状态键，漏声明会被静默丢弃
     case_id: Optional[int]
     suggestion_id: Optional[int]
     guardrails: dict

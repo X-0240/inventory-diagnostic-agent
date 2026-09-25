@@ -15,7 +15,7 @@ import json
 import sys
 from datetime import timedelta
 
-from inv_agent import (anomaly, config, data_pipeline, executor, graph, metrics, pipeline,
+from inv_agent import (anomaly, config, data_pipeline, executor, graph, intake, metrics, pipeline,
                        repository)
 
 def cmd_seed(args):
@@ -79,6 +79,11 @@ def cmd_execute(args):
 def cmd_recover(args):
     print(json.dumps(executor.recover(),ensure_ascii=False,indent=2))
 
+def cmd_ask(args):
+    """自然语言入口：解析成结构化参数；--run 时才真的跑一次计划。"""
+    result=intake.answer(args.text) if args.run else intake.parse(args.text)
+    print(json.dumps(result,ensure_ascii=False,indent=2))
+
 def cmd_report(args):
     start,end=pipeline.period_bounds(args.period)
     result=metrics.recompute(start,end,config.WAREHOUSE_ID)
@@ -125,6 +130,8 @@ def build_parser():
     s.add_argument("--actor",default="alice"); s.add_argument("--role",default="APPROVER")
     s.set_defaults(func=cmd_execute)
     s=sub.add_parser("recover"); s.set_defaults(func=cmd_recover)
+    s=sub.add_parser("ask"); s.add_argument("--text",required=True); s.add_argument("--run",action="store_true")
+    s.set_defaults(func=cmd_ask)
     s=sub.add_parser("report"); s.add_argument("--period",required=True); s.set_defaults(func=cmd_report)
     s=sub.add_parser("graph-run"); s.add_argument("--sku-code",required=True)
     s.add_argument("--period",required=True); s.add_argument("--mode",default="approve")
