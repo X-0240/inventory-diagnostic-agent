@@ -26,6 +26,11 @@ LLM_API_KEY=os.getenv("LLM_API_KEY","")
 LLM_MODEL=os.getenv("LLM_MODEL","")
 #成本护栏：每天最多调用多少次真实模型（防重试/循环烧钱）
 LLM_DAILY_CALL_BUDGET=int(os.getenv("LLM_DAILY_CALL_BUDGET","50"))
+LLM_TIMEOUT_SECONDS=int(os.getenv("LLM_TIMEOUT_SECONDS","60"))
+#输出上限：防模型跑飞（实测未加限时输出过 2.4k–4.2k token，延迟 15 秒以上）
+#注意：默认 0＝不限制。实测这个模型输出 1.8k–4.9k token，任何上限都会把响应截成空字符串，
+#限制输出不能用来提速（详见 docs/LLM延迟对照_20260926.md）。
+LLM_MAX_TOKENS=int(os.getenv("LLM_MAX_TOKENS","0"))
 #成本护栏：累计金额上限（元）与单价（元/百万 token，设定值，需按官方价目核对）
 LLM_BUDGET_CNY=float(os.getenv("LLM_BUDGET_CNY","20"))
 LLM_PRICE_IN_CNY_PER_1M=float(os.getenv("LLM_PRICE_IN_CNY_PER_1M","2.0"))

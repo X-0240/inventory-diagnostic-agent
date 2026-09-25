@@ -36,6 +36,7 @@ class PlanRequest(BaseModel):
     limit:int|None=None
     quota:int|None=None
     force:bool=False
+    workers:int=1
 
 class IntakeRequest(BaseModel):
     text:str
@@ -91,7 +92,7 @@ def execute(suggestion_id:int,actor:ActorContext=Depends(current_actor)):
 def plan_period(body:PlanRequest,actor:ActorContext=Depends(current_actor)):
     """批量计划：与 CLI 的 plan-period 共用 graph.run_period 这一份实现。"""
     result=graph.run_period(body.period,limit=body.limit,quota=body.quota,force=body.force,
-                            actor=actor.actor,role=actor.role)
+                            actor=actor.actor,role=actor.role,workers=body.workers)
     if result.get("status")=="SKIPPED":
         raise HTTPException(status_code=409,detail={"code":"PERIOD_CLOSED","message":result["reason"]})
     return result

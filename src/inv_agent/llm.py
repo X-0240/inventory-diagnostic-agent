@@ -100,11 +100,12 @@ class OpenAICompatLLM(LLMClient):
     """OpenAI 兼容的 /chat/completions，用标准库实现，少一个依赖。"""
     name="openai-compat"
 
-    def __init__(self,base_url,api_key,model,timeout=60):
+    def __init__(self,base_url,api_key,model,timeout=60,max_tokens=None):
         self.base_url=base_url.rstrip("/")
         self.api_key=api_key
         self.model=model
         self.timeout=timeout
+        self.max_tokens=max_tokens
 
     def complete_json(self,system,user):
         if today_calls()>=config.LLM_DAILY_CALL_BUDGET:
@@ -114,6 +115,8 @@ class OpenAICompatLLM(LLMClient):
         body={"model":self.model,"temperature":0,
               "response_format":{"type":"json_object"},
               "messages":[{"role":"system","content":system},{"role":"user","content":user}]}
+        if self.max_tokens:
+            body["max_tokens"]=self.max_tokens
         req=urllib.request.Request(self.base_url+"/chat/completions",
             data=json.dumps(body).encode("utf-8"),
             headers={"Content-Type":"application/json","Authorization":"Bearer "+self.api_key})
@@ -136,5 +139,7 @@ def get_client():
     if os.getenv("LLM_FORCE_STUB")=="1":
         return StubLLM()
     if config.LLM_API_KEY and config.LLM_BASE_URL and config.LLM_MODEL:
-        return OpenAICompatLLM(config.LLM_BASE_URL,config.LLM_API_KEY,config.LLM_MODEL)
+        return OpenAICompatLLM(config.LLM_BASE_URL,config.LLM_API_KEY,config.LLM_MODEL,
+                               timeout=config.LLM_TIMEOUT_SECONDS,
+                               max_tokens=config.LLM_MAX_TOKENS or None)
     return StubLLM()

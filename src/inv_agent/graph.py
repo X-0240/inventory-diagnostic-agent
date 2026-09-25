@@ -7,6 +7,7 @@
 import json
 import sqlite3
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional, TypedDict
 
@@ -194,7 +195,7 @@ def n_finish(state):
                          "system","SYSTEM",{"errors":errors})
     return {}
 
-def build():
+def build(use_checkpointer=True):
     g=StateGraph(RunState)
     g.add_node("load",n_load)
     g.add_node("skip",n_skip)
@@ -217,9 +218,10 @@ def build():
     g.add_edge("execute","recompute")
     g.add_edge("recompute","finish")
     g.add_edge("finish",END)
-    return g.compile(checkpointer=_checkpointer())
+    #批量路径不需要续跑能力：编译成不带 checkpointer 的图，避开 SQLite 争用、也便于并发
+    return g.compile(checkpointer=_checkpointer() if use_checkpointer else None)
 
-def run_period(period,limit=None,quota=None,force=False,actor="system",role="SYSTEM"):
+def run_period(period,limit=None,quota=None,force=False,actor="system",role="SYSTEM",workers=1):
     """批量计划一个周期：CLI 与 HTTP 接口共用这一份实现。
 
     步骤：抢 job_lock → 逐 SKU 评估 → 按影响金额取配额 → 连续确认后进诊断 →
@@ -253,9 +255,16 @@ def run_period(period,limit=None,quota=None,force=False,actor="system",role="SYS
     created=0
     takeover=0
     no_action=0
-    for p in plans:
-        code=p["sku"]["sku_code"]
-        result=run(code,period,mode="plan",diagnose=code in diagnose_set)
+    #诊断要调模型（实测单次十几秒），所以按 SKU 并发跑；并发度有界，避免打爆库与模型配额
+    def one(plan_item):
+        code=plan_item["sku"]["sku_code"]
+        return code,run(code,period,mode="plan",diagnose=code in diagnose_set)
+    if workers and int(workers)>1:
+        with ThreadPoolExecutor(max_workers=int(workers)) as pool:
+            outcomes=list(pool.map(one,plans))
+    else:
+        outcomes=[one(p) for p in plans]
+    for code,result in outcomes:
         if result.get("errors"):
             errors.extend([dict(e,sku=code) for e in result["errors"]])
         if result.get("suggestion_id"):
@@ -264,7 +273,8 @@ def run_period(period,limit=None,quota=None,force=False,actor="system",role="SYS
                 takeover+=1
         else:
             no_action+=1
-    stats={"skus":len(plans),"candidates":len(candidates),"quota_selected":len(selected),
+    stats={"skus":len(plans),"workers":int(workers or 1),
+           "candidates":len(candidates),"quota_selected":len(selected),
            "confirmed_diagnose":len(diagnose_set),"suggestions_created":created,
            "manual_takeover":takeover,"no_action":no_action,"errors":len(errors),
            "streaks":streaks_next,
@@ -276,12 +286,19 @@ def run_period(period,limit=None,quota=None,force=False,actor="system",role="SYS
             "diagnosed":sorted(diagnose_set),"sample_errors":errors[:10]}
 
 GRAPH=None
+PLAN_GRAPH=None
 
 def run(sku_code,period,mode="plan",diagnose=True,actor="unknown",role="APPROVER"):
     """跑一次图；mode='approve' 时会停在审批节点（返回 __interrupt__）。"""
-    global GRAPH
-    if GRAPH is None:
-        GRAPH=build()
+    global GRAPH,PLAN_GRAPH
+    if mode=="plan":
+        if PLAN_GRAPH is None:
+            PLAN_GRAPH=build(use_checkpointer=False)
+        compiled=PLAN_GRAPH
+    else:
+        if GRAPH is None:
+            GRAPH=build()
+        compiled=GRAPH
     #批量模式每次用新 thread：旧 checkpoint 可能带着被重灌删掉的 case_id，
     #业务状态才是权威源，批量路径不该从历史 checkpoint 恢复
     if mode=="plan":
@@ -291,7 +308,7 @@ def run(sku_code,period,mode="plan",diagnose=True,actor="unknown",role="APPROVER
     cfg={"configurable":{"thread_id":thread_id}}
     state={"sku_code":sku_code,"period":period,"mode":mode,"diagnose":diagnose,
            "actor":actor,"role":role,"errors":[]}
-    return GRAPH.invoke(state,cfg)
+    return compiled.invoke(state,cfg)
 
 def resume(sku_code,period,decision,actor,role):
     """用上一次的 checkpoint 续跑（审批决定作为 interrupt 的返回值）。"""

@@ -27,7 +27,7 @@ def _prev_period(period):
 
 def cmd_plan_period(args):
     print(json.dumps(graph.run_period(args.period,limit=args.limit,quota=args.quota,
-                                      force=bool(args.force)),
+                                      force=bool(args.force),workers=args.workers or 1),
                      ensure_ascii=False,indent=2))
 
 def cmd_list(args):
@@ -118,6 +118,7 @@ def build_parser():
     s=sub.add_parser("plan-period"); s.add_argument("--period",required=True)
     s.add_argument("--quota",type=int); s.add_argument("--limit",type=int)
     s.add_argument("--force",action="store_true",help="忽略已成功或运行中的任务，强制重跑")
+    s.add_argument("--workers",type=int,default=1,help="并发跑多少个 SKU（诊断要调模型，并发能显著缩短整体耗时）")
     s.set_defaults(func=cmd_plan_period)
     s=sub.add_parser("list"); s.add_argument("--status"); s.add_argument("--period")
     s.add_argument("--limit",type=int,default=50); s.set_defaults(func=cmd_list)

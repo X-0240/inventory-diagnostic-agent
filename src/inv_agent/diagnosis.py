@@ -21,7 +21,12 @@ SYSTEM_PROMPT=("""你是库存异常归因器，只做三件事：在假设枚�
   "confidence": <0 到 1 之间的数>
 }
 约束：补货数量、价格、是否真正执行都不由你决定；evidence_refs 至少 1 条；
-只能引用输入里给出的因素与证据，不要新增事实。""")
+只能引用输入里给出的因素与证据，不要新增事实。
+输出要求（非常重要，直接影响延迟）：
+- 最多 3 条 evidence_refs，每条 summary 不超过 30 个字
+- 最多 3 条 proposed_actions，每条 rationale 不超过 20 个字
+- 不要输出 schema 之外的任何字段（不要 reasoning、不要解释段落、不要 markdown 代码块）
+- 整体输出控制在 400 token 以内""")
 
 def build_signal(facts,score,detail,evidence):
     """给 LLM 的输入：量化信号 + 证据引用，不含自由文本污染。
