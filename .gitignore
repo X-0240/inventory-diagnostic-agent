@@ -23,6 +23,13 @@ tmp/
 # 文档预览缓存（工具生成，含本机绝对路径，不入库）
 .preview/
 
+# 发布排除清单：留在本地、不进 git，也不进公开仓库
+# 与 scripts/pre_publish_check.py 的 PUBLISH_EXCLUDE 保持一致
+AGENTS.md
+scripts/update_career_doc.py
+docs/build_direction_report.py
+docs/新项目方向调研_20260923.docx
+
 # 编辑器与系统
 .idea/
 .vscode/
