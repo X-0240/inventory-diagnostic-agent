@@ -50,7 +50,6 @@ LLM 只在异常 SKU 上做假设生成、证据收集与整理、是否需要�
 | 批量并发 | `plan-period --workers N`，批量路径改用不带 checkpointer 的图（避免 SQLite 争用）：4 路并发再降到 11.6 秒（1.61×） | `src/inv_agent/graph.py`、`tests/test_concurrency.py` |
 | 稳健 σ 对照 | 同批需求回放：库存深度 −30%，但缺货率 +5.05 个百分点；下限 10%→25% 无差异 | `docs/稳健σ对照_20260926.md` |
 | 延迟结论 | 诊断节点延迟来自输出长度（1.8k–4.9k token）；**限制 max_tokens 会把响应截成空**（400/800 均 0/3 通过），收紧提示词仅 −12% | `docs/LLM延迟对照_20260926.md` |
-| 面试资料 | 第二个项目章节写入 `career\求职与学习资料.docx`（可重复执行的脚本） | `scripts/update_career_doc.py` |
 
 ## v1.4 变更（相对 v1.3，第一期收口）
 
