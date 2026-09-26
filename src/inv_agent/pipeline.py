@@ -7,7 +7,9 @@ import hashlib
 import json
 from datetime import date, timedelta
 
-from inv_agent import anomaly, compute, config, db, facts, guardrails, repository
+#facts 在本文件里是"那批事实"的变量名，所以模块用别名导入，避免撞名
+from inv_agent import anomaly, compute, config, db, guardrails, repository
+from inv_agent import facts as facts_source
 #PlanError 挪到 errors.py（facts 也要用，避免循环导入）；这里保留同名导出
 from inv_agent.errors import PlanError
 
@@ -30,7 +32,7 @@ def load_facts(sku,period,warehouse_id):
     """取该 SKU 在该周期开始时点的事实；每类事实都带来源，便于写进 basis。"""
     start,end=period_bounds(period)
     #事实一律经 facts 适配器取：table 直读本地库，http 走载体接口
-    src=facts.source()
+    src=facts_source.source()
     inv=src.get_inventory(sku,warehouse_id)
     if not inv:
         raise PlanError("NOT_FOUND","缺少库存快照 sku="+str(sku["id"]))
@@ -133,6 +135,11 @@ def evaluate(sku,period,warehouse_id=None,param_snapshot=None):
         {"rule":"eoq","value":round(eoq,2),"order_cost":config.ORDER_COST,"holding_rate":config.HOLDING_RATE},
         {"rule":"inventory_cap","cap_level":cap_level},
     ]
+    #事实版本：让每条建议都能追到"当时用的是哪一版上游数据"（表模式没有版本，返回空）
+    versions=facts_source.source().fact_versions(sku)
+    if versions:
+        basis=basis+[{"source":"facts_version","product":versions.get("product"),
+                      "inventory":versions.get("inventory"),"inbound":versions.get("inbound")}]
     content_hash=hashlib.sha256(
         ("|".join([str(sku["id"]),period,str(qty),str(amount),str(unit_price),config.RULE_VERSION,
                    str(facts["target_qty"]),str(facts["reorder_point"])])).encode("utf-8")

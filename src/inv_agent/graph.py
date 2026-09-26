@@ -247,8 +247,10 @@ def run_period(period,limit=None,quota=None,force=False,actor="system",role="SYS
         errors.append({"sku":code,"code":"NOT_FOUND","message":"载体有该商品但本地无引用行"})
     try:
         products=src.list_products(limit=limit)
+        #批量预热：载体模式下把"每 SKU 4 次接口"压成整批 1 次（表模式是空操作）
+        src.prefetch(products,start,config.WAREHOUSE_ID)
     except pipeline.PlanError as e:
-        #上游连商品清单都给不出来：任务立刻判失败，不能让 job_lock 悬在 RUNNING
+        #上游连商品清单/批量事实都给不出来：任务立刻判失败，不能让 job_lock 悬在 RUNNING
         repository.job_finish(job_id,"FAILED",{"skus":0,"errors":1},
                               error_code=e.code,last_error=str(e)[:240])
         repository.audit("period",0,"PERIOD_PLAN_FAILED",actor,role,
@@ -304,6 +306,8 @@ def run_period(period,limit=None,quota=None,force=False,actor="system",role="SYS
            "candidates":len(candidates),"quota_selected":len(selected),
            "confirmed_diagnose":len(diagnose_set),"suggestions_created":created,
            "manual_takeover":takeover,"no_action":no_action,"errors":len(errors),
+           #上游取数次数：给"批量接口到底省了多少"留证据
+           "source_calls":dict(getattr(src,"fetch_stats",{})),
            "streaks":streaks_next,
            "candidate_top":[{"sku":p["sku"]["sku_code"],"amount":p["amount"],"score":p["score"]}
                             for p in candidates[:20]]}

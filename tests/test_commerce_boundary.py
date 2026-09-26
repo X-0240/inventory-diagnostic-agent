@@ -3,15 +3,9 @@
 这些用例要连载体服务；服务没起时夹具会自己拉起来，起不来才 skip。
 """
 import os
-import subprocess
-import sys
-import time
-from pathlib import Path
 
 import httpx
 import pytest
-
-ROOT=Path(__file__).resolve().parents[1]
 
 class _DeadTransport(httpx.BaseTransport):
     """固定抛连接错误：不依赖本机某个端口是否真的没人监听。"""
@@ -21,35 +15,6 @@ class _DeadTransport(httpx.BaseTransport):
 def dead_source():
     from inv_agent import facts
     return facts.HttpFactsSource(base_url="http://127.0.0.1:8001",transport=_DeadTransport())
-
-@pytest.fixture(scope="session")
-def commerce_url():
-    """载体服务地址：已在跑就复用，否则起一个子进程，用完关掉。"""
-    from inv_agent import config
-    url=config.COMMERCE_BASE_URL
-    proc=None
-
-    def alive(target):
-        try:
-            return httpx.get(target+"/health",timeout=1.5).json().get("status")=="ok"
-        except Exception:
-            return False
-
-    if not alive(url):
-        env=dict(os.environ)
-        env["PYTHONPATH"]=str(ROOT/"src")
-        proc=subprocess.Popen([sys.executable,"-m","uvicorn","commerce_core.api:app",
-                               "--host","127.0.0.1","--port","8001","--log-level","warning"],
-                              cwd=str(ROOT),env=env)
-        for _ in range(40):
-            if alive(url):
-                break
-            time.sleep(0.5)
-    if not alive(url):
-        pytest.skip("载体服务 commerce-core 不可用")
-    yield url
-    if proc:
-        proc.terminate()
 
 def test_table_and_http_give_same_plan(commerce_url,db_ready):
     """同一批 SKU、同一周期：只换事实源，数量/金额/内容哈希必须一致。"""

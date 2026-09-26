@@ -78,6 +78,19 @@ LLM 只在异常 SKU 上做假设生成、证据收集与整理、是否需要�
 | 执行前复检 | 当前事实源单价 ≠ 快照单价，或快照金额 ≠ 建议金额 → `APPROVAL_INVALIDATED` + 审计 | 同上 |
 | 对照证据 | 旧口径 999.00×10 = 9990.00（与审批金额 1000.00 自相矛盾）；新口径 100.00×10 = 1000.00 一致 | `tests/test_price_binding.py`（4 条）、`docs/载体边界_20260926.md` 第七节 |
 
+## v1.7 变更（相对 v1.6，批量事实与数据版本）
+
+按裁定只加两项：批量取数 + 数据版本。**没有**上游建单、库存调整、退货、对账、应付，也没有新增状态机。
+
+| 项 | 结论与数字 | 证据位置 |
+|---|---|---|
+| 批量事实接口 | `GET /facts`：一次传 SKU 列表，返回商品/库存/在途/销量/交期偏差；内部固定 5 条批量查询（窗口函数取最新一条/最近 N 条），单次上限 200 个 SKU | `src/commerce_core/api.py`、`repository.facts_batch` |
+| 调用次数 | 全量 200 个 SKU：逐个取数 **1000 次调用 / 8.1 秒** → 批量 **1 次 / 0.8 秒**（**10.0×**）；计数进了 `job_run.stats_json.source_calls` | `docs/批量事实与数据版本_20260926.md` |
+| 换批量不改结论 | 同一批 20 个 SKU，逐个 vs 批量：数量/金额/内容哈希完全一致 | `tests/test_facts_batch.py` |
+| 数据版本 | 商品/在途带 `data_version`、库存带 `version`，三者都有 `updated_at`；在途版本按 SKU 单独取（收货后不会"消失"） | `migrations/commerce/002_data_version.sql` |
+| 判断新旧 | `If-None-Match` → 304 复用缓存；`updated_since` → 只回变过的 SKU；上游收货后版本与整批 ETag 都变 | 同上 |
+| Agent 侧 | `prefetch()` 按请求指纹缓存（TTL + ETag），未命中的 SKU 自动回退逐 SKU 接口；建议的 `basis` 写入事实版本 | `src/inv_agent/facts.py`、`pipeline.py` |
+
 ## 快速开始
 
 ```bash

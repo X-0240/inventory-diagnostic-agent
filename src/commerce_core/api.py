@@ -9,12 +9,27 @@
 """
 from datetime import date, datetime
 
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, Response
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 
 from commerce_core import config, repository
 
 app=FastAPI(title="commerce-core",version="1.0.0")
+
+#一次批量最多取多少个 SKU：真实平台接口都有上限，超了让调用方分批
+MAX_BATCH_SKUS=200
+
+def _parse_dt(value):
+    """接受 YYYY-MM-DD / YYYY-MM-DD HH:MM:SS / ISO 带 T 三种写法。"""
+    text=str(value).strip().replace("T"," ")
+    for fmt in ("%Y-%m-%d %H:%M:%S","%Y-%m-%d"):
+        try:
+            return datetime.strptime(text,fmt)
+        except ValueError:
+            continue
+    raise HTTPException(status_code=422,
+                        detail={"code":"SCHEMA_INVALID","message":"时间格式应为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM:SS"})
 
 def require_token(x_api_token: str=Header(default="")):
     """接口鉴权：Agent 侧必须带 X-Api-Token。"""
@@ -97,3 +112,55 @@ def receipts(payload: dict=Body(...),_=Depends(require_token)):
     except ValueError as e:
         raise HTTPException(status_code=409,detail={"code":str(e),"message":"收货被拒绝"})
     return jsonable_encoder(result)
+
+@app.get("/facts")
+def facts(skus: str=Query(default=""),warehouse_id: str=Query(default="WH1"),
+          end: str=Query(default=""),days: int=Query(default=56,ge=1,le=730),
+          updated_since: str=Query(default=""),
+          if_none_match: str=Header(default=""),
+          _=Depends(require_token)):
+    """批量事实接口：一次传 SKU 列表，返回商品/库存/在途/销量/交期偏差 + 版本号。
+
+    支持两种"数据新旧"的判断：
+    - If-None-Match：整批指纹没变就回 304，Agent 可以直接复用本地缓存；
+    - updated_since：只要该 SKU 任一事实在那之后变过才返回。
+    """
+    codes=[c.strip() for c in skus.split(",") if c.strip()]
+    if not codes:
+        raise HTTPException(status_code=422,
+                            detail={"code":"SCHEMA_INVALID","message":"skus 不能为空"})
+    if len(codes)>MAX_BATCH_SKUS:
+        raise HTTPException(status_code=422,
+                            detail={"code":"SCHEMA_INVALID",
+                                    "message":"一次最多 %d 个 SKU，请分批"%MAX_BATCH_SKUS})
+    end_date=_parse_dt(end).date() if end else date.today()
+    data=repository.facts_batch(codes,warehouse_id,end_date,days)
+    items=[]
+    skipped=[]
+    for code in codes:
+        item=data.get(code)
+        if not item or (item["product"] is None and item["inventory"] is None):
+            #载体没有这个 SKU（或没有该仓库存）：如实报告，不塞空对象
+            skipped.append(code)
+            continue
+        item["versions"]=repository.versions_of(item)
+        item["updated_at"]=repository.updated_at_of(item)
+        items.append(item)
+    etag=repository.batch_etag(items)
+    if if_none_match and if_none_match.strip()==etag:
+        #整批没变：回 304，不带 body
+        return Response(status_code=304,headers={"ETag":etag})
+    unchanged=[]
+    if updated_since:
+        since=_parse_dt(updated_since)
+        keep=[]
+        for item in items:
+            stamp=item.get("updated_at")
+            changed=stamp is None or _parse_dt(stamp)>since
+            (keep if changed else unchanged).append(item)
+        items=keep
+    payload={"generated_at":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+             "warehouse_id":warehouse_id,"end":str(end_date),"days":int(days),
+             "etag":etag,"items":jsonable_encoder(items),
+             "skipped":skipped,"unchanged":jsonable_encoder(unchanged)}
+    return JSONResponse(content=payload,headers={"ETag":etag})

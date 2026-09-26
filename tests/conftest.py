@@ -1,7 +1,11 @@
 """测试夹具：把 src 加入路径，并提供"数据库可用"的跳过判定。"""
+import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 
+import httpx
 import pytest
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -15,6 +19,35 @@ def db_ready():
     except Exception as e:
         pytest.skip("MySQL 不可用，跳过数据库相关用例: "+str(e))
     return True
+
+@pytest.fixture(scope="session")
+def commerce_url():
+    """载体服务地址：已在跑就复用，否则起一个子进程，用完关掉。"""
+    from inv_agent import config
+    url=config.COMMERCE_BASE_URL
+    proc=None
+
+    def alive(target):
+        try:
+            return httpx.get(target+"/health",timeout=1.5).json().get("status")=="ok"
+        except Exception:
+            return False
+
+    if not alive(url):
+        env=dict(os.environ)
+        env["PYTHONPATH"]=str(ROOT/"src")
+        proc=subprocess.Popen([sys.executable,"-m","uvicorn","commerce_core.api:app",
+                               "--host","127.0.0.1","--port","8001","--log-level","warning"],
+                              cwd=str(ROOT),env=env)
+        for _ in range(40):
+            if alive(url):
+                break
+            time.sleep(0.5)
+    if not alive(url):
+        pytest.skip("载体服务 commerce-core 不可用")
+    yield url
+    if proc:
+        proc.terminate()
 
 @pytest.fixture()
 def temp_suggestion(db_ready):

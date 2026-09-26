@@ -20,6 +20,8 @@ COMMERCE_BASE_URL=os.getenv("COMMERCE_BASE_URL","http://127.0.0.1:8001")
 COMMERCE_API_TOKEN=os.getenv("COMMERCE_API_TOKEN","local-commerce-token")
 #载体超时判成 UPSTREAM_TIMEOUT（不可用≠没数据）；重试与否由编排层策略决定
 COMMERCE_TIMEOUT_SECONDS=float(os.getenv("COMMERCE_TIMEOUT_SECONDS","5"))
+#批量事实的本地缓存有效期（秒）：期内且 ETag 未变就直接复用，不再打上游
+COMMERCE_CACHE_TTL_SECONDS=float(os.getenv("COMMERCE_CACHE_TTL_SECONDS","300"))
 
 #数据生成参数（契约 7：对照实验前冻结并预注册）
 GEN_SEED=int(os.getenv("GEN_SEED","20260924"))
