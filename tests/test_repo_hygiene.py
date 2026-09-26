@@ -1,7 +1,7 @@
 """仓库卫生用例：把"提交前先审查"变成每次跑测试都会执行的检查。
 
-上一轮发布时，工具生成的 .preview 缓存（含本机绝对路径）被顺手提交并公开，
-所以这条用例是补那个洞：可发布文件集合里不允许出现本机路径、密钥、求职资料引用。
+上一轮发布时，工具生成的预览缓存（含本机绝对路径）被顺手提交并公开，
+所以这条用例是补那个洞：可发布文件集合里不允许出现本机路径、密钥、个人资料引用。
 
 用子进程跑真实 CLI，测的就是发布时用的那条命令，不做导入期取巧。
 """
@@ -31,4 +31,4 @@ def test_excluded_paths_never_enter_publishable_set():
     for excluded in ("AGENTS.md","scripts/update_career_doc.py",
                      "docs/build_direction_report.py","docs/新项目方向调研_20260923.docx"):
         assert excluded not in publishable,excluded+" 不该出现在可发布清单里"
-    assert not [p for p in publishable if p.startswith(".preview/")]
+    assert not [p for p in publishable if p.split("/")[0]==".preview"]

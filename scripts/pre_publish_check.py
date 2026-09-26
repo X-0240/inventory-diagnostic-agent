@@ -58,9 +58,14 @@ def git(repo,args):
     return r.stdout
 
 def publishable_files(repo):
-    """当前可发布的文件（跟踪的 - 排除清单）。"""
+    """可发布文件 = 已跟踪 + 未跟踪但没被忽略的，再减排除清单。
+
+    未跟踪的也要扫：上次事故就是新生成的文件还没入库就被一起提交出去了。
+    """
     out=[]
-    for line in git(repo,["ls-files"]).splitlines():
+    listed=git(repo,["ls-files"]).splitlines()
+    listed=listed+git(repo,["ls-files","--others","--exclude-standard"]).splitlines()
+    for line in listed:
         path=line.strip()
         if not path:
             continue
