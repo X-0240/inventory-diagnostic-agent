@@ -5,7 +5,7 @@
 - 计时：读 MySQL performance_schema 的语句摘要（SUM_TIMER_WAIT/COUNT_STAR），
   不含 mysql 客户端与 docker exec 的进程开销
 - 扫描行数：同一摘要里的 SUM_ROWS_EXAMINED；是否走索引看 SUM_NO_INDEX_USED 与 EXPLAIN
-- 结果写入 docs/慢查询对照_<日期>.md
+- 结果写入 docs/慢查询对照.md（固定文件名，每次运行覆盖上一次；历史版本看 git 历史）
 
 顶层直接执行：PYTHONPATH=src python scripts/perf_compare.py
 """
@@ -20,7 +20,8 @@ CONTAINER="inv-mysql"
 ROOT_PW="inv_local_root"
 DB="perf_lab"          #性能对照表放独立库，业务库保持只有 13 张业务表
 BUSINESS_DB="inventory"
-OUT=ROOT/"docs"/("慢查询对照_"+date.today().strftime("%Y%m%d")+".md")
+#固定文件名：按日期命名会越跑越多份同类文档，引用时不知道以哪份为准（2026-09-27 踩过）
+OUT=ROOT/"docs"/"慢查询对照.md"
 
 def sql(statement,db=None):
     args=["docker","exec",CONTAINER,"mysql","-uroot","-p"+ROOT_PW,
