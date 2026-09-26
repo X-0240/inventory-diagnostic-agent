@@ -60,6 +60,36 @@ def freeze_snapshot(params,supplier):
         "credit_limit":supplier.get("credit_limit"),
     }
 
+def freeze_approval_snapshot(params,supplier,suggestion,sku_code=None):
+    """审批快照 = 参数快照 + 这张建议的单价/数量/金额。
+
+    为什么要把单价也冻进来：金额是数量乘单价算出来的，只冻参数不冻单价，
+    上游一调价就会出现"批的是 A 价、落的是 B 价"，而且没有校验收得住。
+    """
+    snapshot=freeze_snapshot(params,supplier)
+    unit_price=suggestion.get("unit_price")
+    if unit_price is None:
+        #兼容旧数据：单价列是后加的，老建议只能按 金额/数量 反推；正式演示前要重跑计划
+        qty=int(suggestion.get("qty") or 0)
+        unit_price=round(float(suggestion.get("amount") or 0)/qty,2) if qty else 0.0
+    snapshot.update({
+        "sku_code":sku_code,
+        "period":suggestion.get("period"),
+        "qty":int(suggestion.get("qty") or 0),
+        "amount":float(suggestion.get("amount") or 0),
+        "unit_price":float(unit_price),
+    })
+    return snapshot
+
+def reverify_price(snapshot,current_unit_price):
+    """执行前复检单价：审批时的单价与当前事实源单价不一致就拒执行。"""
+    frozen=snapshot.get("unit_price")
+    if frozen is None:
+        return [{"code":"UNIT_PRICE_NOT_FROZEN","limit":None,"actual":current_unit_price}]
+    if abs(float(frozen)-float(current_unit_price))>0.005:
+        return [{"code":"UNIT_PRICE_CHANGED","limit":float(frozen),"actual":float(current_unit_price)}]
+    return []
+
 def reverify(snapshot,params,supplier):
     """执行前复检：任何关键参数变化都要拒执行。"""
     changes=[]

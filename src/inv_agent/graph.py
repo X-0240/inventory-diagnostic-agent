@@ -146,8 +146,11 @@ def n_record_approval(state):
         return {"errors":[{"code":"AUTH_FAILED","message":"金额超过审批人权限，需主管审批"}]}
     if actor in ("system",""):
         return {"errors":[{"code":"AUTH_FAILED","message":"审批人不能是 system"}]}
-    supplier=repository.get_supplier(repository.get_sku(suggestion["sku_id"])["supplier_id"])
-    snapshot=guardrails.freeze_snapshot(executor.params_from_config(),supplier)
+    sku=repository.get_sku(suggestion["sku_id"])
+    supplier=repository.get_supplier(sku["supplier_id"])
+    #审批快照连单价/数量/金额一起冻：执行器只认快照里的价，不认当时的库
+    snapshot=guardrails.freeze_approval_snapshot(executor.params_from_config(),supplier,
+                                                suggestion,sku_code=sku["sku_code"])
     repository.record_approval(suggestion["id"],decision,actor,role,
                                suggestion["content_hash"],snapshot,
                                comment="decision="+decision)
@@ -358,7 +361,8 @@ def run_by_id(suggestion_id,decision,actor,role,execute=True):
         return {"errors":[{"code":"AUTH_FAILED","message":"审批人不能是 system"}]}
     sku=repository.get_sku(suggestion["sku_id"])
     supplier=repository.get_supplier(sku["supplier_id"])
-    snapshot=guardrails.freeze_snapshot(executor.params_from_config(),supplier)
+    snapshot=guardrails.freeze_approval_snapshot(executor.params_from_config(),supplier,
+                                                suggestion,sku_code=sku["sku_code"])
     repository.record_approval(suggestion_id,decision,actor,role,
                                suggestion["content_hash"],snapshot,comment="decision="+decision)
     if decision=="APPROVE":

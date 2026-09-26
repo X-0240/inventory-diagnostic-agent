@@ -46,6 +46,7 @@ def _make_suggestion(test_sku,period,qty=10,hash_seed="a",status="PENDING_APPROV
     amount=round(qty*float(sku["unit_cost"]),2)
     content_hash=(hash_seed*64)[:64]
     sid=repository.insert_suggestion(sku_id=test_sku["sku_id"],period=period,qty=qty,amount=amount,
+        unit_price=float(sku["unit_cost"]),
         basis=[{"source":"test"}],rule_trace=[{"rule":"test"}],content_hash=content_hash,status=status)
     return sid,content_hash,amount
 
@@ -85,7 +86,8 @@ def test_fault_after_po_insert_then_recover_keeps_single_po(test_sku,db_ready,mo
     sid,content_hash,amount=_make_suggestion(test_sku,period,hash_seed="e")
     sku=repository.get_sku(test_sku["sku_id"])
     supplier=repository.get_supplier(test_sku["supplier_id"])
-    snapshot=guardrails.freeze_snapshot(executor.params_from_config(),supplier)
+    snapshot=guardrails.freeze_approval_snapshot(executor.params_from_config(),supplier,
+                                                repository.get_suggestion(sid),sku_code=sku["sku_code"])
     repository.record_approval(sid,"APPROVE","bob","SUPERVISOR",content_hash,snapshot)
     repository.set_status(sid,"PENDING_APPROVAL","APPROVED",content_hash)
     monkeypatch.setenv("INV_FAULT_AFTER_PO_INSERT","1")
@@ -105,8 +107,10 @@ def test_fault_after_po_insert_then_recover_keeps_single_po(test_sku,db_ready,mo
 def test_reverse_po_uses_its_own_idempotency_key(test_sku,db_ready):
     period="2099-W05"
     sid,content_hash,amount=_make_suggestion(test_sku,period,hash_seed="f")
+    sku=repository.get_sku(test_sku["sku_id"])
     supplier=repository.get_supplier(test_sku["supplier_id"])
-    snapshot=guardrails.freeze_snapshot(executor.params_from_config(),supplier)
+    snapshot=guardrails.freeze_approval_snapshot(executor.params_from_config(),supplier,
+                                                repository.get_suggestion(sid),sku_code=sku["sku_code"])
     repository.record_approval(sid,"APPROVE","bob","SUPERVISOR",content_hash,snapshot)
     repository.set_status(sid,"PENDING_APPROVAL","APPROVED",content_hash)
     out=executor.submit(sid,"bob","SUPERVISOR")

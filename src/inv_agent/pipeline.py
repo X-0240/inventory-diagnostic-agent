@@ -111,14 +111,17 @@ def evaluate(sku,period,warehouse_id=None,param_snapshot=None):
     cap_level=int(facts["target_qty"]*config.INVENTORY_CAP_MULTIPLIER)
     qty=compute.suggest_qty(facts["inventory_position"],facts["reorder_point"],facts["target_qty"],
                             int(sku["moq"]),int(sku["pack_size"]),eoq_qty=eoq,cap_level=cap_level)
-    amount=compute.impact_amount(qty,float(sku["unit_cost"]))
+    #单价来自事实源（表模式=本地库，载体模式=上游）；金额和内容哈希都绑定它
+    unit_price=float(sku["unit_cost"])
+    amount=compute.impact_amount(qty,unit_price)
     basis=[
         {"source":"inventory_snapshot","snapshot_date":str(facts["inventory"]["snapshot_date"]),
          "available":facts["available"],"version":facts["inventory"]["version"]},
         {"source":"sales_daily","window_days":config.BASELINE_WINDOW_DAYS,
          "baseline_daily":facts["baseline_daily"],"sigma":facts["sigma"]},
         {"source":"supplier","lead_time_days":int(sku["lead_time_days"]),
-         "payment_terms_days":facts["supplier"]["payment_terms_days"]},
+         "payment_terms_days":facts["supplier"]["payment_terms_days"],
+         "unit_price":unit_price},
         {"source":"inbound_order","qty_due_in_leadtime":facts["inbound_due"]},
     ]
     rule_trace=[
@@ -131,14 +134,14 @@ def evaluate(sku,period,warehouse_id=None,param_snapshot=None):
         {"rule":"inventory_cap","cap_level":cap_level},
     ]
     content_hash=hashlib.sha256(
-        ("|".join([str(sku["id"]),period,str(qty),str(amount),config.RULE_VERSION,
+        ("|".join([str(sku["id"]),period,str(qty),str(amount),str(unit_price),config.RULE_VERSION,
                    str(facts["target_qty"]),str(facts["reorder_point"])])).encode("utf-8")
     ).hexdigest()
     return {
         "facts":facts,"sku":sku,"period":period,"warehouse_id":warehouse_id,
         "score":score,"score_detail":detail,"coverage_days":round(coverage,2),
         "surge_ratio":round(surge_ratio,3),"shift_ratio":round(shift_ratio,3),
-        "qty":qty,"amount":amount,"content_hash":content_hash,
+        "qty":qty,"amount":amount,"unit_price":unit_price,"content_hash":content_hash,
         "basis":basis,"rule_trace":rule_trace,"eoq":round(eoq,2),
         "evidence":[
             {"tool":"get_inventory","summary":"可用 %d，在途 %d"%(facts["available"],facts["inbound_due"]),
@@ -200,6 +203,7 @@ def persist_plan(plan,diagnosis=None,case_id=None,status="PENDING_APPROVAL",viol
             case_id=None
     suggestion_id=repository.insert_suggestion(
         sku_id=sku["id"],period=plan["period"],qty=plan["qty"],amount=plan["amount"],
+        unit_price=plan.get("unit_price"),
         basis=plan["basis"],rule_trace=plan["rule_trace"],content_hash=plan["content_hash"],
         case_id=case_id,hypothesis=hypothesis,evidence=evidence,conflicting=conflicting,
         proposed_actions=proposed,confidence=confidence,status=status)

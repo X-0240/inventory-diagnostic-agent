@@ -40,6 +40,10 @@ class FactsSource:
     def get_leadtime_bias(self,sku,limit=10):
         raise NotImplementedError
 
+    def get_unit_price(self,sku):
+        """当前采购单价：执行器执行前要拿它和审批快照比，防"批的是A价、落的是B价"。"""
+        raise NotImplementedError
+
 class TableFactsSource(FactsSource):
     """本地表模式：与 v1.4 的读取路径逐字一致，保证回归不漂移。"""
     mode="table"
@@ -64,6 +68,10 @@ class TableFactsSource(FactsSource):
                           "WHERE sku_id=%s AND status='RECEIVED' AND actual_date IS NOT NULL "
                           "ORDER BY id DESC LIMIT "+str(int(limit)),(sku["id"],))
         return [int(r["bias"]) for r in rows if r["bias"] is not None]
+
+    def get_unit_price(self,sku):
+        row=repository.get_sku(sku["id"])
+        return float(row["unit_cost"])
 
 class HttpFactsSource(FactsSource):
     """载体模式：只走 HTTP，拿不到上游库的账号；连接按进程复用。"""
@@ -158,6 +166,10 @@ class HttpFactsSource(FactsSource):
     def get_leadtime_bias(self,sku,limit=10):
         data=self._get("/products/"+sku["sku_code"]+"/leadtime-bias",{"limit":int(limit)})
         return [int(x) for x in data["items"]]
+
+    def get_unit_price(self,sku):
+        #单价也以上游为准；上游调价必须能被执行前复检抓到
+        return float(self._params_for(sku["sku_code"])["unit_cost"])
 
 _source=None
 

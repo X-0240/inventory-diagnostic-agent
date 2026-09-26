@@ -10,7 +10,7 @@
 import hashlib
 import os
 
-from inv_agent import config,guardrails,repository
+from inv_agent import config,facts,guardrails,repository
 
 class ExecutionError(RuntimeError):
     def __init__(self,code,message):
@@ -49,6 +49,14 @@ def submit(suggestion_id,actor="system",role="APPROVER"):
         snapshot=json.loads(snapshot)
     #执行前复检：审批依据里的参数变了就拒执行
     changes=guardrails.reverify(snapshot,params_from_config(),supplier)
+    #执行前复检单价：审批时的单价必须等于当前事实源单价（上游调价就重新审批）
+    frozen_price=snapshot.get("unit_price")
+    current_price=facts.source().get_unit_price(sku)
+    changes=changes+guardrails.reverify_price(snapshot,current_price)
+    #快照金额与建议金额不一致说明快照被篡改或被跨版本覆盖，一律拒执行
+    if abs(float(snapshot.get("amount",0))-float(suggestion["amount"]))>0.005:
+        changes.append({"code":"AMOUNT_MISMATCH","limit":snapshot.get("amount"),
+                        "actual":float(suggestion["amount"])})
     if changes:
         repository.audit("suggestion",suggestion_id,"GUARDRAIL_REVERIFY_FAILED",actor,role,{"changes":changes})
         raise ExecutionError("APPROVAL_INVALIDATED","审批快照与当前参数不一致: "+str(changes))
@@ -66,8 +74,9 @@ def submit(suggestion_id,actor="system",role="APPROVER"):
         replayed=True
     else:
         po_no=repository.next_po_no(suggestion["period"],sku["sku_code"])
-        repository.insert_po(sku["supplier_id"],sku["id"],suggestion["qty"],sku["unit_cost"],
-                             suggestion["amount"],suggestion_id,key,snapshot,po_no)
+        #单价与金额都用审批快照里的值：批的是哪个价，落的就必须是哪个价
+        repository.insert_po(sku["supplier_id"],sku["id"],suggestion["qty"],frozen_price,
+                             snapshot.get("amount"),suggestion_id,key,snapshot,po_no)
         repository.audit("purchase_order",0,"PO_SUBMITTED",actor,role,
                          {"po_no":po_no,"amount":float(suggestion["amount"]),"idempotency_key":key})
     if os.getenv("INV_FAULT_AFTER_PO_INSERT")=="1" and not replayed:

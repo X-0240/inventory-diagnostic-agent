@@ -117,13 +117,14 @@ def get_suggestion(suggestion_id):
 
 def insert_suggestion(sku_id,period,qty,amount,basis,rule_trace,content_hash,
                       case_id=None,hypothesis=None,evidence=None,conflicting=False,
-                      proposed_actions=None,confidence=None,status="DRAFT"):
+                      proposed_actions=None,confidence=None,status="DRAFT",unit_price=None):
     try:
         with db.tx() as cur:
-            cur.execute("INSERT INTO replenishment_suggestion (sku_id,period,case_id,qty,amount,basis_json,"
+            cur.execute("INSERT INTO replenishment_suggestion (sku_id,period,case_id,qty,amount,unit_price,"
+                        "basis_json,"
                         "rule_trace_json,hypothesis_type,evidence_refs,conflicting_evidence,proposed_actions,"
-                        "confidence,content_hash,status) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                        (sku_id,period,case_id,qty,amount,dumps(basis),
+                        "confidence,content_hash,status) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (sku_id,period,case_id,qty,amount,unit_price,dumps(basis),
                          dumps(rule_trace),hypothesis,
                          dumps(evidence) if evidence is not None else None,
                          1 if conflicting else 0,
