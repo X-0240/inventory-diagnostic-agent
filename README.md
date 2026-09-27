@@ -46,8 +46,8 @@ LLM 只在异常 SKU 上做假设生成、证据收集与整理、是否需要�
 
 | 项 | 变更 | 证据位置 |
 |---|---|---|
-| 连接复用 | 事务不再每次新建 MySQL 连接（按线程复用）：200 个 SKU 的批量计划从约 5 分钟降到 **18.7 秒**；全量测试从 66 秒降到 10 秒 | `src/inv_agent/db.py` |
-| 批量并发 | `plan-period --workers N`，批量路径改用不带 checkpointer 的图（避免 SQLite 争用）：4 路并发再降到 11.6 秒（1.61×） | `src/inv_agent/graph.py`、`tests/test_concurrency.py` |
+| 连接复用 | 事务不再每次新建 MySQL 连接（按线程复用）：200 个 SKU 的批量计划 164.8 秒 → **12.70–12.74 秒**（约 13×，桩模式墙钟，3 次）；全量测试从 66 秒降到 10 秒 | `src/inv_agent/db.py`、`docs/批量计划性能对照.md` |
+| 批量并发 | `plan-period --workers N`，批量路径改用不带 checkpointer 的图（避免 SQLite 争用）：4 路并发再降到 **8.74–8.78 秒**（1.45×） | `src/inv_agent/graph.py`、`tests/test_concurrency.py`、`docs/批量计划性能对照.md` |
 | 稳健 σ 对照 | 同批需求回放：库存深度 −30%，但缺货率 +5.05 个百分点；下限 10%→25% 无差异 | `docs/稳健σ对照_20260926.md` |
 | 延迟结论 | 诊断节点延迟来自输出长度（1.8k–4.9k token）；**限制 max_tokens 会把响应截成空**（400/800 均 0/3 通过），收紧提示词仅 −12% | `docs/LLM延迟对照_20260926.md` |
 
