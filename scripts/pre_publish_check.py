@@ -49,11 +49,28 @@ SKIP_SUFFIX=(".png",".jpg",".jpeg",".gif",".ico",".pdf",".woff",".woff2",".ttf",
 #Office 文档是 zip：文本藏在 xml 里，不能当二进制跳过
 ZIP_TEXT_SUFFIX=(".docx",".xlsx",".pptx")
 
-def git(repo,args):
+#只检查会被发布的这条线；archive/* 是重写前的本地备份，按规则永不 push
+PUBLISH_REF="main"
+
+
+def publish_revs(repo):
+    """发布线的提交列表：优先 main，没有就退回 HEAD。
+
+    archive/* 扫进来只会制造假红（里面的旧路径本来就不打算发布），所以不用 rev-list --all。
+    """
+    for ref in (PUBLISH_REF,"HEAD"):
+        out=git(repo,["rev-list",ref],allow_codes=(128,))
+        if out.strip():
+            return out.split()
+    return []
+
+
+def git(repo,args,allow_codes=()):
     #quotepath=false：否则中文文件名会被转义成 \346\226... 导致读不到文件
+    #allow_codes：git grep 无命中时返回 1，那是"干净"而不是错误，调用方可以显式放行
     r=subprocess.run(["git","-C",str(repo),"-c","core.quotepath=false"]+args,capture_output=True,text=True,
                      encoding="utf-8",errors="replace")
-    if r.returncode!=0:
+    if r.returncode!=0 and r.returncode not in allow_codes:
         raise SystemExit("git 失败: "+" ".join(args)+"\n"+r.stderr)
     return r.stdout
 
@@ -118,16 +135,21 @@ def scan_tree(repo):
 def scan_history(repo):
     """全历史扫可发布文件：发布快照必须连历史都干净。"""
     findings=[]
-    revs=git(repo,["rev-list","--all"]).split()
+    revs=publish_revs(repo)
     for rev in revs:
         names=git(repo,["ls-tree","-r","--name-only",rev]).splitlines()
         for rel in [n.strip() for n in names if n.strip()]:
             if rel.startswith(".preview/") or rel in PUBLISH_EXCLUDE:
                 findings.append(("FAIL","历史里有排除项",rel,0,rev[:8]))
-        #历史内容抽查交给 git grep，逐提交读太慢
-    hits=git(repo,["grep","-I","-n","-E",
-                   r"[A-Za-z]:[\\/]{1,2}Users[\\/]|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}",
-                   "--","."]).splitlines()
+    #历史内容要连已删除文件的旧内容一起查，所以必须显式带上每个 rev；
+    #不带 rev 的 git grep 扫的是工作树，那部分已由 scan_tree 覆盖
+    #git grep 无命中返回 1（正常），不放行会把"干净仓库"误判成脚本出错
+    if revs:
+        hits=git(repo,["grep","-I","-n","-E",
+                       r"[A-Za-z]:[\\/]{1,2}Users[\\/]|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}",
+                       *revs,"--","."],allow_codes=(1,)).splitlines()
+    else:
+        hits=[]
     for h in hits:
         findings.append(("FAIL","历史里有本机路径或密钥",h[:160],0,""))
     return findings
