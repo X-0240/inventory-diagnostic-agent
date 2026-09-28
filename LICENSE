@@ -19,12 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-补充说明（不属于许可条款本身）
-
-本许可证只覆盖本仓库内的源代码与文档。数据部分单独说明：
-
-- 销量数据来自 UCI Machine Learning Repository 的 Online Retail 数据集，遵循 **CC BY 4.0**，署名信息与来源见 README「数据来源」一节；使用该数据不适用本仓库的 MIT 许可。
-- 库存、在途、交期、账期等由本地模拟器按固定随机种子生成，属**构造数据**；本仓库不对其真实性作任何主张，也不构成真实商业数据。
-- 评测对照文档里的性能与指标数字都是本机实测值，随硬件、数据库后端与数据状态变化，不承诺复现。
