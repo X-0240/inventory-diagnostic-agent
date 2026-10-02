@@ -3,7 +3,7 @@
 - 数据：两张放大表 perf_sales（150 万行）、perf_suggestion（20 万行），同一批数据只造一次
 - 变量：唯一变量是索引；每个查询测前先清掉该表所有非主键索引
 - 计时：读 MySQL performance_schema 的语句摘要（SUM_TIMER_WAIT/COUNT_STAR），
-  不含 mysql 客户端与 docker exec 的进程开销
+  不含客户端进程开销
 - 扫描行数：同一摘要里的 SUM_ROWS_EXAMINED；是否走索引看 SUM_NO_INDEX_USED 与 EXPLAIN
 - 结果写入 docs/慢查询对照.md（固定文件名，每次运行覆盖上一次；历史版本看 git 历史）
 
@@ -157,7 +157,7 @@ def main():
            "放大表：perf_sales %d 行、perf_suggestion %d 行。"%(counts["perf_sales"],counts["perf_suggestion"]),
            "",
            "口径：同一张表、同一批数据、同一实例；唯一变量是索引（测前先清空该表非主键索引）；",
-           "耗时与扫描行数取自 MySQL performance_schema 语句摘要（不含客户端与 docker exec 开销），每次跑 3 条取平均。",
+           "耗时与扫描行数取自 MySQL performance_schema 语句摘要（不含客户端进程开销），每次跑 3 条取平均。",
            "",
            "| 查询 | 优化前平均耗时 | 优化后平均耗时 | 优化前扫描行数 | 优化后扫描行数 | 优化前访问方式/键 | 优化后访问方式/键 | 优化前filesort | 优化后filesort | 新增慢日志 |",
            "|---|---|---|---|---|---|---|---|---|---|"]
