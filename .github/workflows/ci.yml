@@ -1,0 +1,19 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install linters（与本地同一版本）
+        run: pip install ruff==0.16.10 black==24.8.0
+      - name: Ruff 检查
+        run: ruff check .
+      - name: Black 排版检查
+        run: black --check .
+    # 说明：123 条 pytest 需要 MySQL，未纳入 CI。接 MySQL service 容器是另一件事，待定。
