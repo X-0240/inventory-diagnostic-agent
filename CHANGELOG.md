@@ -3,6 +3,16 @@
 本文件记录每一版“改了什么、为什么改”。上手与运行方式见 [README.md](README.md)，
 实测数字与口径见 [docs/证据与局限.md](docs/证据与局限.md)。
 
+## 门面与基建整理（2026-10-02，不改业务行为）
+
+| 项 | 变更 | 影响 |
+|---|---|---|
+| 运行方式收敛 | 仓库不再保留 Docker 路径（删除 `Dockerfile`、`docker-compose.yml`），本机原生 MySQL 8.4 是唯一运行方式 | 业务代码未动 |
+| 迁移脚本 | `scripts/migrate.py`、`scripts/migrate_commerce.py` 从 `docker exec` 改为直连本机 MySQL：建库建号 + 按文件名顺序执行 SQL（pymysql，整文件交给服务端执行） | 幂等；实测脚本跑前后行数一致（Agent 库 sku 200 / sales 33175 / inventory 56000 / 建议 154，载体库 200 / 33175 / 56000 / 3132），`pytest` **123 passed** |
+| Python 版本口径 | 原 `Dockerfile` 写 3.12，实际开发环境是 3.10.20，README 按实测改 | 文档与代码一致 |
+| README 结构 | 运行章节改成原生 MySQL 三条命令（起库 → 迁移 → seed），依赖表同步 | 文档与代码一致 |
+| 历史数字 | 早期在 Docker MySQL 上的实测记录保留在 `docs/`，只标注后端不同、不能混引 | 不改写历史结论 |
+
 ## v1.1 变更（相对 v1）
 
 | 项 | 变更 | 证据位置 |

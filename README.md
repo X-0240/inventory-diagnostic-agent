@@ -17,9 +17,10 @@
 ## 跑一个完整周期（示例）
 
 ```bash
-docker compose up -d                                          # 起 MySQL 8.4
-PYTHONPATH=src .venv/Scripts/python scripts/migrate.py         # 建表（13 张）
-PYTHONPATH=src .venv/Scripts/python -m inv_agent.cli seed      # 灌演示数据：公开销量 + 构造库存/在途
+# 前提：本机 MySQL 8.4 已启动（启动方式见「快速开始」）
+PYTHONPATH=src .venv/Scripts/python scripts/migrate.py           # 建库建号 + Agent 库 13 张表（幂等）
+PYTHONPATH=src .venv/Scripts/python scripts/migrate_commerce.py  # 建载体库 commerce + 服务账号
+PYTHONPATH=src .venv/Scripts/python -m inv_agent.cli seed        # 灌演示数据：公开销量 + 构造库存/在途
 PYTHONPATH=src .venv/Scripts/python -m inv_agent.cli plan-period --period 2011-W20
 PYTHONPATH=src .venv/Scripts/python -m inv_agent.cli plan-period --period 2011-W21
 PYTHONPATH=src .venv/Scripts/python -m inv_agent.cli list --status PENDING_APPROVAL
@@ -42,8 +43,8 @@ PYTHONPATH=src .venv/Scripts/python -m inv_agent.cli report --period 2011-W21
 
 | 依赖 | 版本 | 说明 |
 |---|---|---|
-| Python | 3.12 | `Dockerfile` 用 `python:3.12-slim` |
-| MySQL | 8.4 | `docker compose up -d` 起；也可用本机 MySQL（见下） |
+| Python | 3.10+ | 开发环境实测 3.10.20 |
+| MySQL | 8.4 | 本机原生安装（本仓库不依赖 Docker） |
 | 依赖包 | 见 `requirements.txt` | langgraph、pymysql、fastapi、pandas、pydantic 等 |
 
 ```bash
@@ -53,8 +54,17 @@ cp .env.example .env          # 填数据库密码；LLM_* 留空即走确定性
 
 **不想烧模型钱、也不想每次等十几秒**：设 `LLM_FORCE_STUB=1`（即使配了 key 也走桩，演示与回归测试都用它）。
 
-**用本机 MySQL 而不是 Docker**：装一个 MySQL 8.4，按 `.env` 建好库与账号，再用
-`mysql -e "source migrations/001_schema.sql"` 逐个执行迁移（`scripts/migrate.py` 走的是 `docker exec`）。
+**MySQL 怎么起**：装一个 MySQL 8.4（开发机用的是免安装 ZIP，未注册成 Windows 服务，重启后要手动起）。
+把下面的 `<MySQL 解压目录>` 换成自己的路径：
+
+```powershell
+$b='<MySQL 解压目录>'
+Start-Process "$b\bin\mysqld.exe" -ArgumentList "--basedir=$b","--datadir=<数据目录>","--port=3306","--bind-address=127.0.0.1" -WindowStyle Hidden
+```
+
+库、账号与表都由迁移脚本按 `.env` 建好（`CREATE DATABASE/USER IF NOT EXISTS`，可重复跑）：
+`scripts/migrate.py` 建 Agent 库 `inventory` 与账号 `inv_app`，`scripts/migrate_commerce.py` 建载体库 `commerce` 与账号 `commerce_svc`。
+两个账号的授权范围互不重叠，Agent 账号读载体库会被数据库直接拒绝（有负向测试守着）。
 
 ## 架构
 
@@ -164,4 +174,4 @@ PYTHONPATH=src .venv/Scripts/python -m uvicorn commerce_core.api:app --port 8001
 
 - **销量数据**来自 UCI Machine Learning Repository 的 Online Retail 数据集（CC BY 4.0），仅作需求信号使用。该数据**不适用**本仓库的 MIT 许可，遵循其原始许可。
 - **库存、在途、交期、账期**由本地模拟器按固定随机种子生成，属**构造数据**：本仓库不对其真实性作任何主张，也不代表真实商业数据。
-- 文档里的性能与指标数字都是本机实测值，随硬件、数据库后端与数据状态变化；两种数据库后端（Docker MySQL / 本机 MySQL）的口径已在 [`docs/证据与局限.md`](docs/证据与局限.md) 与 [`docs/批量与投影性能对照.md`](docs/批量与投影性能对照.md) 分开记录，不能混引。
+- 文档里的性能与指标数字都是本机实测值，随硬件、数据库后端与数据状态变化；两种数据库后端（早期 Docker MySQL / 现在的本机 MySQL）的口径已在 [`docs/证据与局限.md`](docs/证据与局限.md) 与 [`docs/批量与投影性能对照.md`](docs/批量与投影性能对照.md) 分开记录，不能混引。
