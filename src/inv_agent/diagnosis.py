@@ -121,10 +121,7 @@ def diagnose(client, signal, max_retry=1):
     for attempt in range(max_retry + 1):
         prompt = SYSTEM_PROMPT
         if attempt > 0:
-            prompt += (
-                "\n上一次输出不合法，错误：%s\n请只修正字段名与结构后重新输出完整 JSON。"
-                % last_error
-            )
+            prompt += f"\n上一次输出不合法，错误：{last_error}\n请只修正字段名与结构后重新输出完整 JSON。"
         raw = client.complete_json(
             prompt, json.dumps(signal, ensure_ascii=False)
         )

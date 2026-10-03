@@ -76,7 +76,7 @@ def test_workers_reduce_wall_time(db_ready, monkeypatch):
         # 并发最多等到串行的 70%：留出线程与数据库开销的余量
         assert (
             par_seconds < seq_seconds * 0.7
-        ), "并发没有生效：串行 %.1fs vs 并发 %.1fs" % (seq_seconds, par_seconds)
+        ), f"并发没有生效：串行 {seq_seconds:.1f}s vs 并发 {par_seconds:.1f}s"
     finally:
         _cleanup(PERIOD_A)
         _cleanup(PERIOD_B)

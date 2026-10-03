@@ -121,8 +121,7 @@ def describe(memories):
     for m in memories:
         value = m["value_json"] if isinstance(m["value_json"], dict) else {}
         lines.append(
-            "%s/%s %s：%s"
-            % (
+            "{}/{} {}：{}".format(
                 m["scope"],
                 m["scope_key"],
                 m["kind"],

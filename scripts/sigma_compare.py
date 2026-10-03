@@ -234,7 +234,7 @@ def main():
         [
             "# 稳健 σ 前后对照（仿真回放）",
             "",
-            "生成时间：%s" % date.today().isoformat(),
+            f"生成时间：{date.today().isoformat()}",
             "口径：同一批真实销量、同一组参数（交期/服务水平/MOQ/包装/复核周期/库存上限），唯一变量是 σ 估计方式。",
             "A 组=样本标准差（旧）；B 组=稳健 σ（MAD + 间歇需求模型 + 均值 10% 下限）；C 组=稳健 σ 但下限提到 25%。",
             "这是仿真回放指标，不是真实业务效果；判定人与口径即本文件。",
@@ -255,14 +255,12 @@ def main():
                 new["stockout_sku_days"],
                 mid["stockout_sku_days"],
             ),
-            "| 缺货率 | %.2f%% | %.2f%% | %.2f%% |"
-            % (
+            "| 缺货率 | {:.2f}% | {:.2f}% | {:.2f}% |".format(
                 old["stockout_rate"] * 100,
                 new["stockout_rate"] * 100,
                 mid["stockout_rate"] * 100,
             ),
-            "| 平均在手库存（中位数） | %.1f | %.1f | %.1f |"
-            % (
+            "| 平均在手库存（中位数） | {:.1f} | {:.1f} | {:.1f} |".format(
                 old["avg_inventory_median"],
                 new["avg_inventory_median"],
                 mid["avg_inventory_median"],
@@ -306,9 +304,8 @@ def main():
             "",
             "## 结论与取舍",
             "",
-            "- 稳健 σ 达到了设计目的：平均在手库存中位数从 %.1f 降到 %.1f（−%.0f%%），"
-            "也就是把批发型极端订单顶起来的库存深度压下去了。"
-            % (
+            "- 稳健 σ 达到了设计目的：平均在手库存中位数从 {:.1f} 降到 {:.1f}（−{:.0f}%），"
+            "也就是把批发型极端订单顶起来的库存深度压下去了。".format(
                 old["avg_inventory_median"],
                 new["avg_inventory_median"],
                 (1 - new["avg_inventory_median"] / old["avg_inventory_median"])
@@ -323,10 +320,11 @@ def main():
                 new["orders_total"] - old["orders_total"],
                 new["order_qty_total"] - old["order_qty_total"],
             ),
-            "- 下限从 10%% 提到 25%% 几乎没有变化（缺货率 %.2f%% vs %.2f%%），"
+            "- 下限从 10% 提到 25% 几乎没有变化（缺货率 {:.2f}% vs {:.2f}%），"
             "说明真正的杠杆是**估计器**而不是下限；要保住服务水平，应该调的是服务水平参数（z）或复核周期，"
-            "而不是继续抬下限。"
-            % (new["stockout_rate"] * 100, mid["stockout_rate"] * 100),
+            "而不是继续抬下限。".format(
+                new["stockout_rate"] * 100, mid["stockout_rate"] * 100
+            ),
             "",
             "## 局限",
             "",

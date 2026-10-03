@@ -198,8 +198,9 @@ def parse(text, client=None):
             "code": "AMBIGUOUS",
             "intent": raw["intent"],
             "entities": entity_hits,
-            "message": "一次请求提到多个商品（%s），请分开问或指定其一"
-            % "、".join(entity_hits),
+            "message": "一次请求提到多个商品（{}），请分开问或指定其一".format(
+                "、".join(entity_hits)
+            ),
         }
     sku_result = resolve_sku(raw.get("sku_query", ""))
     if sku_result["status"] == "AMBIGUOUS":

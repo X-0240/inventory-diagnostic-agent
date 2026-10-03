@@ -136,7 +136,7 @@ class HttpFactsSource(FactsSource):
             # 超时/连不上：这不是"数据没有"，是"上游不可用"，两者处置不同
             raise PlanError(
                 "UPSTREAM_TIMEOUT", "载体不可用: " + type(e).__name__
-            )
+            ) from e
         if r.status_code == 304:
             return r
         if r.status_code == 401:

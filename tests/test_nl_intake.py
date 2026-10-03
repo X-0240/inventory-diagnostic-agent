@@ -50,7 +50,7 @@ def test_frozen_nl_cases_with_stub(case, db_ready, monkeypatch):
     expect = case["expect"]
     assert (
         result["code"] == expect["code"]
-    ), "用例「%s」期望 %s，实际 %s（%s）" % (
+    ), "用例「{}」期望 {}，实际 {}（{}）".format(
         case["text"],
         expect["code"],
         result["code"],
@@ -64,7 +64,9 @@ def test_frozen_nl_cases_with_stub(case, db_ready, monkeypatch):
         assert result["params"]["sku_code"] == expect["sku_code"]
         assert (
             result["params"]["period"] == want_period
-        ), "周期解析不对：%s vs %s" % (result["params"]["period"], want_period)
+        ), "周期解析不对：{} vs {}".format(
+            result["params"]["period"], want_period
+        )
         assert result["intent"] == expect["intent"]
 
 
@@ -75,7 +77,7 @@ def test_answer_wires_into_graph(db_ready, monkeypatch):
     period = intake.shift_period(
         latest, -9
     )  # 找一个没跑过的周期，避免命中已有建议
-    result = intake.answer("查一下 23166 在 %s 的库存" % period)
+    result = intake.answer(f"查一下 23166 在 {period} 的库存")
     assert result["ok"] is True, result
     assert result["params"]["period"] == period
     try:

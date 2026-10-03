@@ -176,7 +176,7 @@ def execute(suggestion_id: int, actor: ActorContext = Depends(current_actor)):
         }.get(code, 400)
         raise HTTPException(
             status_code=status, detail={"code": code, "message": str(e)}
-        )
+        ) from e
 
 
 @app.post("/jobs/plan")

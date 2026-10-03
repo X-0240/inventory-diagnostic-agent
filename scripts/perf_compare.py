@@ -125,11 +125,10 @@ def reset_indexes(table):
     """清掉该表所有非主键索引，保证"优化前"这一侧确实没索引可用。"""
     rows = sql(
         "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS "
-        "WHERE TABLE_SCHEMA='%s' AND TABLE_NAME='%s' AND INDEX_NAME<>'PRIMARY'"
-        % (DB, table)
+        f"WHERE TABLE_SCHEMA='{DB}' AND TABLE_NAME='{table}' AND INDEX_NAME<>'PRIMARY'"
     )
     for name in [r.strip() for r in rows.splitlines() if r.strip()]:
-        sql("DROP INDEX `%s` ON %s" % (name, table))
+        sql(f"DROP INDEX `{name}` ON {table}")
 
 
 def collect_explain(query):
@@ -234,7 +233,7 @@ def main():
     lines = [
         "# 慢查询优化前后对照",
         "",
-        "生成时间：%s" % date.today().isoformat(),
+        f"生成时间：{date.today().isoformat()}",
         "放大表：perf_sales %d 行、perf_suggestion %d 行。"
         % (counts["perf_sales"], counts["perf_suggestion"]),
         "",

@@ -59,8 +59,7 @@ def main():
     print(
         "模型:",
         config.LLM_MODEL,
-        "| 预算: %s 元 | 已用: %.4f 元"
-        % (config.LLM_BUDGET_CNY, llm.total_cost_cny()),
+        f"| 预算: {config.LLM_BUDGET_CNY} 元 | 已用: {llm.total_cost_cny():.4f} 元",
     )
     started_cost = llm.total_cost_cny()
     rows = []
@@ -119,8 +118,7 @@ def main():
     lines = [
         "# 真实模型冒烟验证",
         "",
-        "时间：%s；模型：%s；temperature=0。"
-        % (date.today().isoformat(), config.LLM_MODEL),
+        f"时间：{date.today().isoformat()}；模型：{config.LLM_MODEL}；temperature=0。",
         "",
         "**这是冒烟验证，不是评估**：不报分类准确率。期望结论由我按规则推导、样本量小，",
         "只能证明「真实模型在受限 schema 下能稳定产出可用结构」，不能证明模型好坏。",
@@ -134,9 +132,8 @@ def main():
         % (statistics.mean(latencies) if latencies else 0),
         "| 延迟中位数 | %d ms |"
         % (statistics.median(latencies) if latencies else 0),
-        "| 本次估算成本 | %.4f 元 |" % used,
-        "| 累计估算成本 | %.4f 元（上限 %s 元） |"
-        % (llm.total_cost_cny(), config.LLM_BUDGET_CNY),
+        f"| 本次估算成本 | {used:.4f} 元 |",
+        f"| 累计估算成本 | {llm.total_cost_cny():.4f} 元（上限 {config.LLM_BUDGET_CNY} 元） |",
         "",
         "## 逐条明细",
         "",
@@ -152,7 +149,11 @@ def main():
                 r["score"],
                 "通过" if r["ok"] else "拒绝",
                 r.get("hypothesis", "-"),
-                ("%.2f" % r["confidence"]) if "confidence" in r else "-",
+                (
+                    ("{:.2f}".format(r["confidence"]))
+                    if "confidence" in r
+                    else "-"
+                ),
                 r.get("needs_human", "-"),
                 r.get("evidence_count", "-"),
                 r["latency_ms"],

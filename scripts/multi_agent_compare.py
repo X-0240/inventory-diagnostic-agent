@@ -251,21 +251,21 @@ def main():
         "| 总调用次数 | %d | %d |" % (a["calls_total"], b["calls_total"]),
         "| 输出 token 合计 | %d | %d |"
         % (a["completion_tokens_total"], b["completion_tokens_total"]),
-        "| 每次调用平均延迟 | %.1f 秒 | %.1f 秒 |"
-        % (
+        "| 每次调用平均延迟 | {:.1f} 秒 | {:.1f} 秒 |".format(
             a["latency_mean_s"] / max(1, a["calls_total"] / max(1, a["skus"])),
             b["latency_mean_s"] / max(1, b["calls_total"] / max(1, b["skus"])),
         ),
-        "| 每 SKU 平均耗时 | %.1f 秒 | %.1f 秒 |"
-        % (a["latency_mean_s"], b["latency_mean_s"]),
-        "| 证据覆盖族数（均值，满分 3） | %.2f | %.2f |"
-        % (a["coverage_mean"], b["coverage_mean"]),
+        "| 每 SKU 平均耗时 | {:.1f} 秒 | {:.1f} 秒 |".format(
+            a["latency_mean_s"], b["latency_mean_s"]
+        ),
+        "| 证据覆盖族数（均值，满分 3） | {:.2f} | {:.2f} |".format(
+            a["coverage_mean"], b["coverage_mean"]
+        ),
         "| 三条事实族全覆盖的 SKU | %d | %d |"
         % (a["coverage_full3"], b["coverage_full3"]),
         "| 两臂结论一致率 | — | %d/%d |" % (same, len(signals)),
         "",
-        "本次估算成本：%.4f 元（累计 %.4f / %s 元）"
-        % (used, llm.total_cost_cny(), config.LLM_BUDGET_CNY),
+        f"本次估算成本：{used:.4f} 元（累计 {llm.total_cost_cny():.4f} / {config.LLM_BUDGET_CNY} 元）",
         "",
         "## 结论",
         "",

@@ -93,11 +93,12 @@ def test_audit_event_is_append_only(db_ready):
             "VALUES ('test',1,'X','tester','ADMIN')"
         )
         audit_id = cur.lastrowid
-    with pytest.raises(Exception):
+    # 审计表由数据库触发器拒绝写入与删除，驱动抛出的异常类型由 MySQL 决定，这里只断言一定失败
+    with pytest.raises(Exception):  # noqa: B017
         db.execute(
             "UPDATE audit_event SET event_type='Y' WHERE id=%s", (audit_id,)
         )
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         db.execute("DELETE FROM audit_event WHERE id=%s", (audit_id,))
 
 

@@ -138,9 +138,7 @@ def publishable_files(repo):
 def _keeps(rule, path, line):
     if Path(path).name in RULE_SKIP_FILES.get(rule, ()):
         return False
-    if rule == "有值的密钥配置" and PLACEHOLDER.search(line):
-        return False
-    return True
+    return not (rule == "有值的密钥配置" and PLACEHOLDER.search(line))
 
 
 def scan_text(path, text, findings, warn_only=False):
@@ -235,7 +233,7 @@ def report(findings):
             continue
         seen.add(key)
         location = ("%s:%d" % (path, line)) if line else path
-        print("[%s] %s | %s | %s" % (level, name, location, text))
+        print(f"[{level}] {name} | {location} | {text}")
     print("---- 汇总：FAIL %d，WARN %d ----" % (len(fails), len(warns)))
     return 1 if fails else 0
 

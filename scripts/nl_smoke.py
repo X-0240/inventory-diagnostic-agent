@@ -21,20 +21,20 @@ OUT = ROOT / "docs" / ("NL入口冒烟_" + date.today().strftime("%Y%m%d") + ".m
 def check(case, result, latest):
     expect = case["expect"]
     if result["code"] != expect["code"]:
-        return False, "期望 %s，实际 %s" % (expect["code"], result["code"])
+        return False, "期望 {}，实际 {}".format(expect["code"], result["code"])
     if expect["code"] != "OK":
         return True, ""
     want = resolve_marker(expect["period"], latest, intake.shift_period)
     got = result["params"]
     if got["sku_code"] != expect["sku_code"] or got["period"] != want:
-        return False, "期望 %s@%s，实际 %s@%s" % (
+        return False, "期望 {}@{}，实际 {}@{}".format(
             expect["sku_code"],
             want,
             got["sku_code"],
             got["period"],
         )
     if result["intent"] != expect["intent"]:
-        return False, "意图期望 %s，实际 %s" % (
+        return False, "意图期望 {}，实际 {}".format(
             expect["intent"],
             result["intent"],
         )
@@ -86,8 +86,7 @@ def main():
     lines = [
         "# NL 入口冒烟（真实模型）",
         "",
-        "时间：%s；模型：%s；temperature=0。"
-        % (date.today().isoformat(), config.LLM_MODEL),
+        f"时间：{date.today().isoformat()}；模型：{config.LLM_MODEL}；temperature=0。",
         "",
         "**这是功能用例通过率，不是模型能力评测**：期望值由我按种子数据手写，样本 10 条。",
         "",
@@ -96,9 +95,8 @@ def main():
         "| 用例数 | %d |" % len(rows),
         "| 通过 | %d |" % len(passed),
         "| 平均延迟 | %d ms |" % (statistics.mean(lat) if lat else 0),
-        "| 本次估算成本 | %.4f 元 |" % used,
-        "| 累计成本 | %.4f / %s 元 |"
-        % (llm.total_cost_cny(), config.LLM_BUDGET_CNY),
+        f"| 本次估算成本 | {used:.4f} 元 |",
+        f"| 累计成本 | {llm.total_cost_cny():.4f} / {config.LLM_BUDGET_CNY} 元 |",
         "",
         "## 明细",
         "",

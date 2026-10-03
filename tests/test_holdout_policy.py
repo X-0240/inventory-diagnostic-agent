@@ -21,9 +21,7 @@ def test_adjusted_scenarios_are_not_in_holdout():
     for scenario in HOLDOUT_EXCLUDED:
         codes = [c for c, s in scenarios.items() if s == scenario]
         dev, held_out = split_for_scenario(scenario, codes)
-        assert held_out == [], (
-            "场景 %s 阈值调过，不应出现在 held-out" % scenario
-        )
+        assert held_out == [], f"场景 {scenario} 阈值调过，不应出现在 held-out"
         assert sorted(dev) == sorted(codes)
 
 

@@ -117,7 +117,7 @@ def inbound(
                     "code": "SCHEMA_INVALID",
                     "message": "until 需要 YYYY-MM-DD",
                 },
-            )
+            ) from None
     rows = repository.list_inbound(sku_code, until_date)
     due = (
         repository.inbound_due_qty(sku_code, until_date)
@@ -150,7 +150,7 @@ def sales(
                     "code": "SCHEMA_INVALID",
                     "message": "end 需要 YYYY-MM-DD",
                 },
-            )
+            ) from None
     rows = repository.sales_series(sku_code, end_date, days)
     return {"sku_code": sku_code, "days": days, "items": jsonable_encoder(rows)}
 
@@ -192,7 +192,7 @@ def receipts(payload: dict = Body(...), _=Depends(require_token)):
     except ValueError as e:
         raise HTTPException(
             status_code=409, detail={"code": str(e), "message": "收货被拒绝"}
-        )
+        ) from e
     return jsonable_encoder(result)
 
 

@@ -159,8 +159,7 @@ def main():
             "; ".join(b["errors"]) or "-",
         ),
         "",
-        "本次估算成本：%.4f 元（累计 %.4f / %s 元）"
-        % (used, llm.total_cost_cny(), config.LLM_BUDGET_CNY),
+        f"本次估算成本：{used:.4f} 元（累计 {llm.total_cost_cny():.4f} / {config.LLM_BUDGET_CNY} 元）",
         "",
         "## 改动前的基线（同一模型、同一批信号）",
         "",
